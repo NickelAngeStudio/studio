@@ -1,4 +1,7 @@
-use crate::{display::{ error::DisplayError, screen::ScreenList, desktop::window::Window}, error::StudioError};
+//! Linux implementations of [Window].
+
+use crate::{display::{ error::DisplayError, desktop::window::Window}, error::StudioError};
+use super::super::screen::ScreenList;
 
 use super::WindowProvider;
 

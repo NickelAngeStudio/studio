@@ -6,10 +6,10 @@ use std::process::exit;
 
 use studio::display::desktop::window::Window;
 use studio::display::error::DisplayError;
-use studio::display::event::{WindowEvent, WindowEventKeyboard};
-use studio::display::provider::WindowProvider;
-use studio::display::provider::linux::get_x11_window;
-use studio::display::provider::linux::x11::X11Window;
+use studio::display::desktop::event::{ Event, EventKeyboard};
+use studio::display::desktop::provider::WindowProvider;
+use studio::display::desktop::provider::linux::get_x11_window;
+use studio::display::desktop::provider::linux::x11::X11Window;
 use studio::error::StudioError;
 
 use crate::*;

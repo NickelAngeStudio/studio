@@ -5,7 +5,7 @@ use crate::display::error::DisplayError;
 #[allow(non_camel_case_types)]
 pub enum StudioError {
 
-    /// Error that happens within [Display] module. 
+    /// Error that happens within display module. 
     Display(DisplayError),
 
     

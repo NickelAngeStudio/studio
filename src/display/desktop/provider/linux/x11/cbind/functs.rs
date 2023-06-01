@@ -2,7 +2,7 @@
 use std::os::raw::{c_uchar, c_char, c_int, c_long, c_uint, c_ulong};
 
 use super::attributes::{XWindowAttributes, Visual, XSetWindowAttributes, Screen};
-use super::event::{ XEvent, Atom, XClientMessageEvent, X11Display, X11Handle};
+use super::structs::{ XEvent, Atom, XClientMessageEvent, X11Display, X11Handle};
 
 
 #[link(name = "X11")]

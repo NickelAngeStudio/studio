@@ -1,3 +1,5 @@
+//! Hardware display information.
+
 use cfg_boost::{meta_cfg, match_cfg};
 
 use crate::{error::StudioError, display::error::DisplayError};
@@ -30,7 +32,7 @@ impl ScreenList {
     pub fn new() -> Result<ScreenList, StudioError> {
 
         match_cfg! {
-            linux => crate::display::provider::linux::get_linux_screen_list(),
+            linux => super::provider::linux::get_linux_screen_list(),
             _ => todo!()
         }
         
@@ -54,7 +56,7 @@ impl ScreenList {
             linux => {
                 match provider{
                     WindowProvider::Wayland => todo!(),
-                    WindowProvider::X11 =>  crate::display::provider::linux::x11::screen::get_x11_screen_list(),
+                    WindowProvider::X11 =>  super::provider::linux::x11::screen::get_x11_screen_list(),
                     _ => Err(StudioError::Display(DisplayError::NotSupported)),
                 }
             }, 
@@ -76,7 +78,7 @@ impl ScreenList {
 
     /// Get primary screen reference.
     /// 
-    /// Returns Some([KScreen]) with primary screen or None if no screen.
+    /// Returns Some([Screen]) with primary screen or None if no screen.
     pub fn get_primary_screen(&self) -> Option<&Screen> {
         for screen in &self.screen_list {
             if screen.is_primary() {
@@ -119,7 +121,7 @@ pub struct Screen {
 }
 
 impl Screen {
-    /// Create a new [KScreen] with fields.
+    /// Create a new [Screen] with fields.
     pub fn new(identifier : String, position : (i32,i32), resolution : (u32, u32), refresh_rate : u32, primary : bool, supported : Vec<ScreenResolution>) -> Screen{
         Screen { identifier, position, resolution, refresh_rate, primary, supported }
     }
@@ -170,7 +172,7 @@ pub struct ScreenResolution {
 }
 
 impl ScreenResolution {
-    /// Create a new [KScreenResolution] with fields.
+    /// Create a new [ScreenResolution] with fields.
     pub fn new(width : u32, height : u32) -> ScreenResolution {
         ScreenResolution { width, height, refresh_rate: Vec::new() }
     }

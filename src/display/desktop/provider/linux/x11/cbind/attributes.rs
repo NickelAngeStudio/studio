@@ -1,8 +1,8 @@
 use std::{os::raw::{ c_int, c_ulong, c_long }, ptr::null_mut};
 
-use super::event::{X11Handle, X11Display, XPointer, VisualID, Pixmap, Cursor};
+use super::structs::{X11Handle, X11Display, XPointer, VisualID, Pixmap, Cursor};
 
-use super::event::Colormap;
+use super::structs::Colormap;
 
 /// XWindowAttributes struct used to get x11 windows attributes with XGetWindowAttributes
 #[repr(C)]

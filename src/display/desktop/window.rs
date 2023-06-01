@@ -1,23 +1,26 @@
+//! Window abstraction and properties
+
 use std::any::Any;
 
-use crate::display::{provider::WindowProvider, event::WindowEvent};
-use super::cursor::{CursorProperty, CursorMode};
+use super::{provider::WindowProvider };
+use super::pointer::{ PointerMode};
+use super::event::Event;
 
-
- /// Minimum [Display] width allowed.
+ /// Minimum [Window] width allowed.
  pub const WINDOW_MIN_WIDTH : u32 = 1;
 
- /// Minimum [Display] height allowed.
+ /// Minimum [Window] height allowed.
  pub const WINDOW_MIN_HEIGHT : u32 = 1;
 
- /// Maximum [Display] width allowed.
+ /// Maximum [Window] width allowed.
  pub const WINDOW_MAX_WIDTH : u32 = 65535;
 
- /// Maximum [Display] height allowed.
+ /// Maximum [Window] height allowed.
  pub const WINDOW_MAX_HEIGHT : u32 = 65535;
 
 
-/// [Display] fullscreen mode enumeration.
+
+/// [Window] fullscreen mode enumeration.
 pub enum FullscreenMode {
     /// Window will be set fullscreen in the current screen this window belong to.
     CurrentScreen,
@@ -29,6 +32,7 @@ pub enum FullscreenMode {
     DesktopScreen,
 }
 
+
 /// [Window] properties.
 pub struct WindowProperty {
 
@@ -36,7 +40,7 @@ pub struct WindowProperty {
     pub title : String,
 
     /// Cursor mode and properties
-    pub cursor : CursorProperty,
+    pub cursor : super::pointer::PointerProperty,
 
     /// Position of window as pair of i32(x,y)
     pub position : (i32, i32),
@@ -59,11 +63,11 @@ pub struct WindowProperty {
 }
 
 impl WindowProperty {
-    /// Create a new instance of [DisplayProperty] with default values from position and size.
+    /// Create a new instance of [WindowProperty] with default values from position and size.
     pub fn new(position : (i32, i32), size : (u32, u32)) -> WindowProperty {
         WindowProperty{ 
             title: String::new(), 
-            cursor: CursorProperty::new(), 
+            cursor: super::pointer::PointerProperty::new(), 
             position, 
             size, 
             center: (size.0 as i32 / 2, size.1 as i32 / 2), 
@@ -74,6 +78,7 @@ impl WindowProperty {
     }
 }
 
+
 /// Abstraction of a [Window](https://en.wikipedia.org/wiki/Windowing_system#Display_server)
 /// and/or [Window manager](https://en.wikipedia.org/wiki/Window_manager) used to create and manage window.
 pub trait Window {
@@ -81,50 +86,47 @@ pub trait Window {
     fn get_window_provider(&self) -> WindowProvider;
 
     /// Pop a window event from the queue.
-    fn poll_event(&mut self) -> WindowEvent;
+    fn poll_event(&mut self) -> Event;
 
     /// Get the count of events that need handling.
     fn get_event_count(&self) -> usize;
 
     /// Get windows properties.
-    /// 
-    /// The [KWindowManager] is responsible for updating this struct.
     fn get_window_property(&self) -> &WindowProperty;
 
     /// Set the cursor position
     /// 
     /// Must be overridden for desktop implementation.
-    fn set_cursor_position(&mut self, position : (i32, i32))  { todo!( )}
+    fn set_cursor_position(&mut self, position : (i32, i32));
 
-    /// Set the cursor mode for the [KWindow] [DisplayEventMouse](enum.DisplayEventMouse.html) events.
+    /// Set the cursor mode for the [Window] [EventMouse](super::event::EventMouse) events.
     /// 
     /// Must be overridden for desktop implementation.
-    fn set_cursor_mode(&mut self, mode : CursorMode)  { todo!( )}
-
+    fn set_cursor_mode(&mut self, mode : PointerMode) ;
     /// Hide system default cursor.
     /// 
     /// Must be overridden for desktop implementation.
-    fn hide_cursor(&mut self)  { todo!( )}
+    fn hide_cursor(&mut self);
 
     /// Show system default cursor.
     /// 
     /// Must be overridden for desktop implementation.
-    fn show_cursor(&mut self) { todo!( )}
+    fn show_cursor(&mut self);
 
     /// Confine cursor to window, preventing it from exiting boundaries.
     /// 
     /// Must be overridden for desktop implementation.
-    fn confine_cursor(&mut self) { todo!( )}
+    fn confine_cursor(&mut self);
 
     /// Release cursor from window, allowing it to exit boundaries.
     /// 
     /// Must be overridden for desktop implementation.
-    fn release_cursor(&mut self)  { todo!( )}
+    fn release_cursor(&mut self);
 
     /// Restore the window, undoing any minimized, maximized and/or fullscreen status.
     /// 
     /// Must be overridden for desktop implementation.
-    fn restore(&mut self)  { todo!( )}
+    fn restore(&mut self);
 
     /// Set a new title for the window.
     fn set_title(&mut self, title : &str);
@@ -132,14 +134,14 @@ pub trait Window {
     /// Set a size for window.
     /// 
     /// Must be overridden for desktop implementation.
-    fn set_size(&mut self, size : (u32, u32))  { todo!( )}
+    fn set_size(&mut self, size : (u32, u32));
 
      /// Set a position of window.
      /// 
      /// Must be overridden for desktop implementation.
-    fn set_position(&mut self, position : (i32, i32))  { todo!( )}
+    fn set_position(&mut self, position : (i32, i32));
 
-    /// Set the window as fullscreen according to [KFullscreenMode].
+    /// Set the window as fullscreen according to [FullscreenMode].
     fn set_fullscreen(&mut self, fs_mode : FullscreenMode);
 
     /// Perform sync with the display server / window manager.

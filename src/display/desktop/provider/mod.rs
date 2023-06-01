@@ -1,3 +1,5 @@
+//! Implementation of [Window](super::window::Window) according to platform window provider.
+
 use cfg_boost::target_cfg;
 
 /// Enumeration of [Display server](https://en.wikipedia.org/wiki/Windowing_system#Display_server)
@@ -17,20 +19,13 @@ pub enum WindowProvider {
     /// Apple MacOS [Quartz](https://en.wikipedia.org/wiki/Quartz_Compositor) compositor.
     MacOs,
 
-    /// Android [SurfaceFlinger](https://en.wikipedia.org/wiki/Windowing_system#SurfaceFlinger) compositor.
-    Android,
-
-    /// Apple IOS [Quartz](https://en.wikipedia.org/wiki/Quartz_Compositor) compositor.
-    IOS,
-
     /// [Web assembly](https://en.wikipedia.org/wiki/WebAssembly) browser compositor.
     WASM,
 }
 
 target_cfg! {
     linux => {
-        /// Linux implementation of DisplayManager
-        #[doc(hidden)]
+        // Linux implementation of Window trait
         pub mod linux;
     },
 

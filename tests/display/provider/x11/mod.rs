@@ -81,23 +81,23 @@ macro_rules! window_x11_step_loop {
                 let event = $window.poll_event();
 
                 match event {
-                    WindowEvent::Keyboard(event) => match event {
-                        WindowEventKeyboard::KeyDown(keycode) => 
+                    Event::Keyboard(event) => match event {
+                        EventKeyboard::KeyDown(keycode) => 
                         {        
                             println!("KeyCode={}", keycode);
                             if keycode == 65 {
                                 break 'outer;   // Break outer loop
                             }
         
-                            if keycode == 2 {
+                            if keycode == 9 {
                                 exit(0);    // Exit test
                             }
 
                         },
-                        WindowEventKeyboard::KeyUp(_) => { },
+                        EventKeyboard::KeyUp(_) => { },
                     },
 
-                    WindowEvent::None => break 'inner,     // Break inner loop
+                    Event::None => break 'inner,     // Break inner loop
                 _   => {},
                 }
             }
