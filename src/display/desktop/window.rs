@@ -32,53 +32,6 @@ pub enum FullscreenMode {
     DesktopScreen,
 }
 
-
-/// [Window] properties.
-pub struct WindowProperty {
-
-    /// Window title
-    pub title : String,
-
-    /// Cursor mode and properties
-    pub cursor : super::pointer::PointerProperty,
-
-    /// Position of window as pair of i32(x,y)
-    pub position : (i32, i32),
-
-    /// Size of window as pair of u32 (width, height).
-    pub size : (u32, u32),
-
-    /// Window center,
-    pub center : (i32, i32),
-
-    /// Window is minimized
-    pub is_minimized : bool,
-
-    /// Window is maximized
-    pub is_maximized : bool,
-
-    /// Window is fullscreen
-    pub is_fullscreen : bool,
-
-}
-
-impl WindowProperty {
-    /// Create a new instance of [WindowProperty] with default values from position and size.
-    pub fn new(position : (i32, i32), size : (u32, u32)) -> WindowProperty {
-        WindowProperty{ 
-            title: String::new(), 
-            cursor: super::pointer::PointerProperty::new(), 
-            position, 
-            size, 
-            center: (size.0 as i32 / 2, size.1 as i32 / 2), 
-            is_minimized: false, 
-            is_maximized: false, 
-            is_fullscreen: false 
-        }
-    }
-}
-
-
 /// Abstraction of a [Window](https://en.wikipedia.org/wiki/Windowing_system#Display_server)
 /// and/or [Window manager](https://en.wikipedia.org/wiki/Window_manager) used to create and manage window.
 pub trait Window {
@@ -91,55 +44,53 @@ pub trait Window {
     /// Get the count of events that need handling.
     fn get_event_count(&self) -> usize;
 
-    /// Get windows properties.
-    fn get_window_property(&self) -> &WindowProperty;
+    /// Get the current pointer position.
+    fn get_pointer_position(&self) -> (i32, i32);
 
-    /// Set the cursor position
-    /// 
-    /// Must be overridden for desktop implementation.
-    fn set_cursor_position(&mut self, position : (i32, i32));
+    /// Set the pointer position
+    fn set_pointer_position(&mut self, position : (i32, i32));
 
-    /// Set the cursor mode for the [Window] [EventMouse](super::event::EventMouse) events.
-    /// 
-    /// Must be overridden for desktop implementation.
-    fn set_cursor_mode(&mut self, mode : PointerMode) ;
+    /// Get the [Window] pointer mode.
+    fn get_pointer_mode(&self);
+
+    /// Set the pointer mode for the [Window] [EventMouse](super::event::EventMouse) events.
+    fn set_pointer_mode(&mut self, mode : PointerMode) ;
+
     /// Hide system default cursor.
-    /// 
-    /// Must be overridden for desktop implementation.
-    fn hide_cursor(&mut self);
+    fn hide_pointer(&mut self);
 
     /// Show system default cursor.
-    /// 
-    /// Must be overridden for desktop implementation.
-    fn show_cursor(&mut self);
+    fn show_pointer(&mut self);
 
     /// Confine cursor to window, preventing it from exiting boundaries.
-    /// 
-    /// Must be overridden for desktop implementation.
-    fn confine_cursor(&mut self);
+    fn confine_pointer(&mut self);
 
     /// Release cursor from window, allowing it to exit boundaries.
-    /// 
-    /// Must be overridden for desktop implementation.
-    fn release_cursor(&mut self);
+    fn release_pointer(&mut self);
 
     /// Restore the window, undoing any minimized, maximized and/or fullscreen status.
-    /// 
-    /// Must be overridden for desktop implementation.
     fn restore(&mut self);
+
+    /// Get window title.
+    fn get_title(&self) -> &str;
 
     /// Set a new title for the window.
     fn set_title(&mut self, title : &str);
 
+    /// Get current window size.
+    fn get_size() ->  (u32, u32);
+
     /// Set a size for window.
-    /// 
-    /// Must be overridden for desktop implementation.
     fn set_size(&mut self, size : (u32, u32));
 
+    /// Get current window position.
+    fn get_position() ->  (i32, i32);
+
      /// Set a position of window.
-     /// 
-     /// Must be overridden for desktop implementation.
     fn set_position(&mut self, position : (i32, i32));
+
+    /// Return true if window is set to fullscreen.
+    fn is_fullscreen() -> bool;
 
     /// Set the window as fullscreen according to [FullscreenMode].
     fn set_fullscreen(&mut self, fs_mode : FullscreenMode);

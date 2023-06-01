@@ -1,9 +1,9 @@
 use core::time;
 use std::thread;
 use std::time::Duration;
-use std::{rc::Rc, cell::RefCell};
 use std::process::exit;
 
+use studio::display::desktop::pointer::PointerMode;
 use studio::display::desktop::window::Window;
 use studio::display::error::DisplayError;
 use studio::display::desktop::event::{ Event, EventKeyboard};
@@ -51,17 +51,19 @@ fn window_x11_get_display_server() {
         // V1 | Window::get_display_server_provider() returns the correct X11 provider.
         assert_eq!(wx11.get_window_provider(), WindowProvider::X11, "Wrong provider given!");
         thread::sleep(WAIT_MS);
+
+        let wx11 = wx11.as_any().downcast_ref::<X11Window>().unwrap();
         
         // V2 | Window::get_display_server_connection() returns a valid connection pointer.
-        //assert_ne!(wx11.get_display_server_connection(), std::ptr::null_mut(), "Window X11 connection pointer error!");
-        //thread::sleep(WAIT_MS);
+        assert_ne!(wx11.get_display_server_connection(), std::ptr::null_mut(), "Window X11 connection pointer error!");
+        thread::sleep(WAIT_MS);
 
         // V3 | Window::get_display_server_window() returns a valid window pointer.
-        //assert_ne!(wx11.get_window_handle(), std::ptr::null_mut(), "Window X11 window pointer error!");
-        //thread::sleep(WAIT_MS);
+        assert_ne!(wx11.get_window_handle(), std::ptr::null_mut(), "Window X11 window pointer error!");
+        thread::sleep(WAIT_MS);
     });
 }
-/*
+
 #[test]
 #[ignore = "User interaction"]
 /// Get X11 Window event count.
@@ -69,7 +71,7 @@ fn window_x11_get_display_server() {
 /// # Verification(s)
 /// V1 | Window::get_event_count() returns the event count without error.
 fn window_x11_get_event_count() {
-    window_x11_prepare!(wx11, dispatcher, receiver, {
+    window_x11_prepare!(wx11 {
 
         // V1 | Window::get_event_count() returns the event count without error.
         let _c = wx11.get_event_count();
@@ -96,10 +98,10 @@ fn window_x11_get_event_count() {
 /// V10 | Window::confine_cursor() prevent cursor from exiting boundaries without error.
 /// V11 | Calling Window::confine_cursor() again doesn't generate error.
 /// V12 | Window::is_cursor_confined() is true.
-/// V13 | Window::set_cursor_mode() to acceleration keep the cursor in the middle of window.
-/// V14 | Window::get_cursor_mode() returns acceleration.
-/// V15 | Window::set_cursor_mode() to pointer release the cursor from the middle of window.
-/// V16 | Window::get_cursor_mode() returns pointer.
+/// V13 | Window::get_pointer_mode() to acceleration keep the cursor in the middle of window.
+/// V14 | Window::get_pointer_mode() returns acceleration.
+/// V15 | Window::get_pointer_mode() to pointer release the cursor from the middle of window.
+/// V16 | Window::get_pointer_mode() returns pointer.
 /// V17 | Window::release_cursor() let cursor exit boundaries without error.
 /// V18 | Calling Window::release_cursor() again without error.
 /// V19 | Window::is_cursor_confined() is false.
@@ -107,10 +109,10 @@ fn window_x11_get_event_count() {
 /// V21 | Make cursor confined. Losing focus should release cursor while gaining focus should confine cursor.
 /// V22 | Make cursor mode acceleration. Losing focus should release cursor while gaining focus should confine cursor in center.
 fn window_x11_cursor_properties() {
-    window_x11_prepare!(wx11, dispatcher, receiver, {
+    window_x11_prepare!(wx11 {
 
         // V1 | Window::get_motion_mode() returns the default motion mode.
-        assert_eq!(wx11.get_cursor_mode(), CursorMode::Pointer, "Wrong default cursor mode!");
+        assert_eq!(wx11.get_pointer_mode(), PointerMode::Pointer, "Wrong default cursor mode!");
 
         // V2 | Window::is_cursor_confined() is false by default.
         assert_eq!(wx11.is_cursor_confined(), false, "Cursor shouldn't be confined by default!");
@@ -121,71 +123,71 @@ fn window_x11_cursor_properties() {
         window_x11_step_loop!("Cursor should be visible and not confined...", wx11, dispatcher, receiver);
 
         // V4 | Window::hide_cursor() hide cursor without error.
-        wx11.hide_cursor();
+        wx11.hide_pointer();
 
         window_x11_step_loop!("Cursor should be hidden and not confined...", wx11, dispatcher, receiver);
 
         // V5 | Calling Window::hide_cursor() again doesn't generate error.
-        wx11.hide_cursor();
+        wx11.hide_pointer();
 
         // V6 | Window::is_cursor_visible() is false.
         assert_eq!(wx11.is_cursor_visible(), false, "Cursor shouldn't be visible!");
 
         // V7 | Window::show_cursor() show cursor without error.
-        wx11.show_cursor();
+        wx11.show_pointer();
         window_x11_step_loop!("Cursor should be visible and not confined...", wx11, dispatcher, receiver);
 
         // V8 | Calling Window::show_cursor() again doesn't generate error.
-        wx11.show_cursor();
+        wx11.show_pointer();
 
         // V9 | Window::is_cursor_visible() is true.
         assert_eq!(wx11.is_cursor_visible(), true, "Cursor should be visible!");
 
         // V10 | Window::confine_cursor() prevent cursor from exiting boundaries without error.
-        wx11.confine_cursor();
+        wx11.confine_pointer();
         window_x11_step_loop!("Cursor should be visible and confined...", wx11, dispatcher, receiver);
 
         // V11 | Calling Window::confine_cursor() again doesn't generate error.
-        wx11.confine_cursor();
+        wx11.confine_pointer();
 
         // V12 | Window::is_cursor_confined() is true.
         assert_eq!(wx11.is_cursor_confined(), true, "Cursor should confined!");
 
         // V13 | Window::set_cursor_mode() to acceleration keep the cursor in the middle of window.
-        wx11.set_cursor_mode(CursorMode::Acceleration);
+        wx11.set_pointer_mode(CursorMode::Acceleration);
 
         // V14 | Window::get_cursor_mode() returns acceleration.
         assert_eq!(wx11.get_cursor_mode(), CursorMode::Acceleration, "Cursor mode should be Acceleration!");
         window_x11_step_loop!("Cursor should be visible, confined and stuck in center...", wx11, dispatcher, receiver);
 
         // V15 | Window::set_cursor_mode() to pointer release the cursor from the middle of window.
-        wx11.set_cursor_mode(CursorMode::Pointer);
+        wx11.set_pointer_mode(CursorMode::Pointer);
 
         // V16 | Window::get_cursor_mode() returns pointer.
         assert_eq!(wx11.get_cursor_mode(), CursorMode::Pointer, "Cursor mode should be Pointer!");
         window_x11_step_loop!("Cursor should be visible, confined and free to move...", wx11, dispatcher, receiver);
 
         // V17 | Window::release_cursor() let cursor exit boundaries without error.
-        wx11.release_cursor();
+        wx11.release_pointer();
         window_x11_step_loop!("Cursor should be visible, released and free to move...", wx11, dispatcher, receiver);
 
         // V18 | Calling Window::release_cursor() again without error.
-        wx11.release_cursor();
+        wx11.release_pointer();
 
         // V19 | Window::is_cursor_confined() is false.
         assert_eq!(wx11.is_cursor_confined(), false, "Cursor shouldn't confined!");
 
         // V20 | Make cursor hidden. Exiting window must make the cursor reappear and disappear when reentering window.
-        wx11.hide_cursor();
+        wx11.hide_pointer();
         window_x11_step_loop!("Exiting window must make the cursor reappear and disappear when reentering window...", wx11, dispatcher, receiver);
 
         // V21 | Make cursor confined. Losing focus should release cursor while gaining focus should confine cursor.
-        wx11.show_cursor();
-        wx11.confine_cursor();
+        wx11.show_pointer();
+        wx11.confine_pointer();
         window_x11_step_loop!("Losing focus should release cursor while gaining focus should confine cursor...", wx11, dispatcher, receiver);
 
         // V22 | Make cursor mode acceleration. Losing focus should release cursor while gaining focus should confine cursor in center.
-        wx11.set_cursor_mode(CursorMode::Acceleration);
+        wx11.set_pointer_mode(CursorMode::Acceleration);
         window_x11_step_loop!("Losing focus should release cursor while gaining focus should confine cursor in center...", wx11, dispatcher, receiver);
     });
 }
@@ -203,17 +205,17 @@ fn window_x11_cursor_properties() {
 /// V4 | Change motion mode to Acceleration. Window::set_cursor_position() should give center.
 /// V5 | Window::set_cursor_position() set the new position without errors multiple times.
 fn window_x11_cursor_position() {
-    window_x11_prepare!(wx11, dispatcher, receiver, {
+    window_x11_prepare!(wx11 {
 
         // Confine cursor for test
-        wx11.confine_cursor();
+        wx11.confine_pointer();
 
         // V1 | Window::get_cursor_position() returns the current cursor position.
         let _cp = wx11.get_cursor_position();
         thread::sleep(WAIT_MS);
 
         // V2 | Window::set_cursor_position() set the new position without errors.
-        wx11.set_cursor_position((CURSOR_X / 2, CURSOR_Y / 2));
+        wx11.set_pointer_position((CURSOR_X / 2, CURSOR_Y / 2));
         thread::sleep(WAIT_MS);
 
         // V3 | Window::get_cursor_position() returns the new position.
@@ -223,7 +225,7 @@ fn window_x11_cursor_position() {
         thread::sleep(WAIT_MS);
 
         // V4 | Change motion mode to Acceleration. Window::set_cursor_position() should give center.
-        wx11.set_cursor_mode(CursorMode::Acceleration);
+        wx11.set_pointer_mode(CursorMode::Acceleration);
 
         let _cp = wx11.get_cursor_position();
         assert_eq!(_cp.0, CURSOR_X, "Cursor X expect {} and not {}!", CURSOR_X, _cp.0);
@@ -231,9 +233,9 @@ fn window_x11_cursor_position() {
         thread::sleep(WAIT_MS);
 
         // V5 | Window::set_cursor_position() set the new position without errors multiple times.
-        wx11.set_cursor_mode(CursorMode::Pointer);
+        wx11.set_pointer_mode(CursorMode::Pointer);
         for i in 0..255 {
-            wx11.set_cursor_position((i * 2,i ));
+            wx11.set_pointer_position((i * 2,i ));
             
             let _cp = wx11.get_cursor_position();
             assert_eq!(_cp.0, i * 2, "Cursor X expect {} and not {}!", i * 2, _cp.0);
@@ -259,7 +261,7 @@ fn window_x11_cursor_position() {
 /// V3 | Window::get_position() return new position.
 /// V4 | Window::set_position() multiple time work without error.
 fn window_x11_position() {
-    window_x11_prepare!(wx11, dispatcher, receiver, {
+    window_x11_prepare!(wx11{
         // V1 | Window::get_position() gives default position.
         let pos = wx11.get_position();
         assert!(pos.0 == wx11.get_position().0, "Default Position X error!");
@@ -310,7 +312,7 @@ fn window_x11_position() {
 /// V9 | Window::get_size() return new size.
 /// V10 | Window::set_size() multiple time without error.
 fn window_x11_size() {
-    window_x11_prepare!(wx11, dispatcher, receiver, {
+    window_x11_prepare!(wx11 {
         // V1 | Window::get_size() returns the default size.
         let size = wx11.get_size();
         assert_eq!(size.0, WINDOW_WIDTH, "Width expect {} and not {}!", WINDOW_WIDTH, size.0);
@@ -373,7 +375,7 @@ fn window_x11_size() {
 /// V3 | Window::get_title() returns the new title.
 /// V4 | Window::set_title() multiple time without error.
 fn window_x11_title() {
-    window_x11_prepare!(wx11, dispatcher, receiver, {
+    window_x11_prepare!(wx11 {
         // V1 | Window::get_title() returns the default title.
         assert_eq!(wx11.get_title(), "", "Default title error!");
 
@@ -405,7 +407,7 @@ fn window_x11_title() {
 /// V7 | Window::restore() called multiple time without error.
 /// V8 | Multiple chain call of set_fullscreen, restore without error.
 fn window_x11_fullscreen_restore() {
-    window_x11_prepare!(wx11, dispatcher, receiver, {
+    window_x11_prepare!(wx11 {
 
         wx11.set_title("Default");
         
@@ -482,4 +484,3 @@ fn window_x11_close() {
     });
 
 }
-*/

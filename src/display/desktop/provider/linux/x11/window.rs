@@ -2,8 +2,8 @@ use std::thread;
 use std::ffi::{ CString, c_int };
 use std::{panic::catch_unwind};
 
-use crate::display::desktop::pointer::PointerMode;
-use crate::display::desktop::window::{WindowProperty, Window, FullscreenMode};
+use crate::display::desktop::pointer::{PointerMode, PointerProperty};
+use crate::display::desktop::window::{ Window, FullscreenMode};
 use super::cbind::{attributes::*, constants::*, functs::*, structs::* };
 
 use super::super::super::super::screen::{ScreenList, Screen};
@@ -53,6 +53,21 @@ pub struct X11Window {
     /// Window handle pointer
     pub(crate) window : *mut X11Handle,
 
+    /// Current position of the window
+    pub(crate) position : (i32,i32),
+
+    /// Current size of the window
+    pub(crate) size : (u32,u32),
+
+    /// Current center of the window
+    pub(crate) center : (i32,i32),
+
+    /// Pointer properties
+    pub(crate) pointer : PointerProperty,
+
+    /// Is window set fullscreen?
+    pub(crate) is_fullscreen : bool,
+
     /// Atoms for handling x11 window properties
     pub(crate) atoms : X11Atoms,
 
@@ -61,9 +76,6 @@ pub struct X11Window {
 
     /// Position and size for restoring window.
     pub(crate) restoration_position_size : ((i32,i32),(u32,u32)),
-
-    /// Window properties.
-    pub(crate) property : WindowProperty,
 
     /// Screen list
     pub(crate) screens : ScreenList,
@@ -91,9 +103,13 @@ impl X11Window {
                 atoms,
                 x_hide_cursor_flag: false,
                 restoration_position_size: (position, (width, height)),
-                property : WindowProperty::new(position, (width, height)),
                 screens,
-                event_count: 0, 
+                event_count: 0,
+                position,
+                size: (width, height),
+                center: (width as i32 /2, height as i32 /2),
+                pointer: PointerProperty::new(),
+                is_fullscreen: false, 
             }
         }
     }
@@ -165,16 +181,12 @@ impl Window for X11Window {
         WindowProvider::X11
     }
 
-    fn get_window_property(&self) -> &WindowProperty {
-        &self.property
-    }
-
-    fn set_cursor_mode(&mut self, mode : PointerMode)  {
-         self.property.cursor.mode = mode;
+    fn set_pointer_mode(&mut self, mode : PointerMode)  {
+         self.pointer.mode = mode;
 
          match mode {
             // Set cursor to center if Acceleration
-            PointerMode::Acceleration => self.set_cursor_position(self.property.center),
+            PointerMode::Acceleration => self.set_pointer_position(self.center),
             _ => todo!(),
         }
     }
@@ -185,21 +197,21 @@ impl Window for X11Window {
         }   
     }
 
-    fn set_cursor_position(&mut self, position : (i32, i32)) {
+    fn set_pointer_position(&mut self, position : (i32, i32)) {
         unsafe {
             XWarpPointer(self.display, self.window, self.window, 0, 0, 
                 0, 0, position.0,  position.1);
         }
     }
 
-    fn hide_cursor(&mut self) {
+    fn hide_pointer(&mut self) {
         unsafe {
             XFixesHideCursor(self.display, self.window);
             self.x_hide_cursor_flag = true;
         }
     }
 
-    fn show_cursor(&mut self)  {
+    fn show_pointer(&mut self)  {
         unsafe {
             if self.x_hide_cursor_flag {    // Make sure X hide cursor was called prior to show.
                 XFixesShowCursor(self.display, self.window);
@@ -208,14 +220,14 @@ impl Window for X11Window {
         }
     }
 
-    fn confine_cursor(&mut self) {
+    fn confine_pointer(&mut self) {
         unsafe {
             XGrabPointer(self.display, self.window, true, 
             0, GrabModeAsync.try_into().unwrap(), GrabModeAsync.try_into().unwrap(), self.window, 0, CurrentTime);
         }
     }
 
-    fn release_cursor(&mut self) {
+    fn release_pointer(&mut self) {
         unsafe {
             XUngrabPointer(self.display, CurrentTime);
         }
@@ -262,9 +274,9 @@ impl Window for X11Window {
     fn set_fullscreen(&mut self, fs_mode : FullscreenMode) {
         unsafe {
 
-            if !self.property.is_fullscreen {
+            if !self.is_fullscreen {
                 // Save windowed properties for restoration.
-                self.restoration_position_size = (X11Window::get_x11_window_position(self.display, self.window), self.property.size);
+                self.restoration_position_size = (X11Window::get_x11_window_position(self.display, self.window), self.size);
             }
 
             // Destroy current window
@@ -359,6 +371,30 @@ impl Window for X11Window {
                 Event::None   // Return None event
             }
         }
+    }
+
+    fn get_pointer_mode(&self) {
+        todo!()
+    }
+
+    fn get_pointer_position(&self) -> (i32, i32) {
+        todo!()
+    }
+
+    fn get_title(&self) -> &str {
+        todo!()
+    }
+
+    fn get_size() ->  (u32, u32) {
+        todo!()
+    }
+
+    fn get_position() ->  (i32, i32) {
+        todo!()
+    }
+
+    fn is_fullscreen() -> bool {
+        todo!()
     }
 
     
