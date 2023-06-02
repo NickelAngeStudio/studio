@@ -1,16 +1,16 @@
 use core::time;
+use std::process::exit;
 use std::thread;
 use std::time::Duration;
-use std::process::exit;
 
 use studio::display::desktop::pointer::PointerMode;
-use studio::display::desktop::window::Window;
+use studio::display::desktop::window::{Window, WINDOW_MIN_WIDTH, WINDOW_MAX_WIDTH, WINDOW_MIN_HEIGHT, WINDOW_MAX_HEIGHT, FullscreenMode};
 use studio::display::error::DisplayError;
-use studio::display::desktop::event::{ Event, EventKeyboard};
 use studio::display::desktop::provider::WindowProvider;
 use studio::display::desktop::provider::linux::get_x11_window;
 use studio::display::desktop::provider::linux::x11::X11Window;
 use studio::error::StudioError;
+use super::dispatch_events;
 
 use crate::*;
 
@@ -112,83 +112,83 @@ fn window_x11_cursor_properties() {
     window_x11_prepare!(wx11 {
 
         // V1 | Window::get_motion_mode() returns the default motion mode.
-        assert_eq!(wx11.get_pointer_mode(), PointerMode::Pointer, "Wrong default cursor mode!");
+        assert_eq!(wx11.get_pointer_properties().mode, PointerMode::Pointer, "Wrong default cursor mode!");
 
         // V2 | Window::is_cursor_confined() is false by default.
-        assert_eq!(wx11.is_cursor_confined(), false, "Cursor shouldn't be confined by default!");
+        assert_eq!(wx11.get_pointer_properties().is_confined, false, "Cursor shouldn't be confined by default!");
 
         // V3 | Window::is_cursor_visible() is true by default.
-        assert_eq!(wx11.is_cursor_visible(), true, "Cursor should be visible by default!");
+        assert_eq!(wx11.get_pointer_properties().is_visible, true, "Cursor should be visible by default!");
 
-        window_x11_step_loop!("Cursor should be visible and not confined...", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Cursor should be visible and not confined...", wx11);
 
         // V4 | Window::hide_cursor() hide cursor without error.
         wx11.hide_pointer();
 
-        window_x11_step_loop!("Cursor should be hidden and not confined...", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Cursor should be hidden and not confined...", wx11);
 
         // V5 | Calling Window::hide_cursor() again doesn't generate error.
         wx11.hide_pointer();
 
         // V6 | Window::is_cursor_visible() is false.
-        assert_eq!(wx11.is_cursor_visible(), false, "Cursor shouldn't be visible!");
+        assert_eq!(wx11.get_pointer_properties().is_visible, false, "Cursor shouldn't be visible!");
 
         // V7 | Window::show_cursor() show cursor without error.
         wx11.show_pointer();
-        window_x11_step_loop!("Cursor should be visible and not confined...", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Cursor should be visible and not confined...", wx11);
 
         // V8 | Calling Window::show_cursor() again doesn't generate error.
         wx11.show_pointer();
 
         // V9 | Window::is_cursor_visible() is true.
-        assert_eq!(wx11.is_cursor_visible(), true, "Cursor should be visible!");
+        assert_eq!(wx11.get_pointer_properties().is_visible, true, "Cursor should be visible!");
 
         // V10 | Window::confine_cursor() prevent cursor from exiting boundaries without error.
         wx11.confine_pointer();
-        window_x11_step_loop!("Cursor should be visible and confined...", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Cursor should be visible and confined...", wx11);
 
         // V11 | Calling Window::confine_cursor() again doesn't generate error.
         wx11.confine_pointer();
 
         // V12 | Window::is_cursor_confined() is true.
-        assert_eq!(wx11.is_cursor_confined(), true, "Cursor should confined!");
+        assert_eq!(wx11.get_pointer_properties().is_confined, true, "Cursor should confined!");
 
         // V13 | Window::set_cursor_mode() to acceleration keep the cursor in the middle of window.
-        wx11.set_pointer_mode(CursorMode::Acceleration);
+        wx11.set_pointer_mode(PointerMode::Acceleration);
 
         // V14 | Window::get_cursor_mode() returns acceleration.
-        assert_eq!(wx11.get_cursor_mode(), CursorMode::Acceleration, "Cursor mode should be Acceleration!");
-        window_x11_step_loop!("Cursor should be visible, confined and stuck in center...", wx11, dispatcher, receiver);
+        assert_eq!(wx11.get_pointer_properties().mode, PointerMode::Acceleration, "Cursor mode should be Acceleration!");
+        window_x11_step_loop!("Cursor should be visible, confined and stuck in center...", wx11);
 
         // V15 | Window::set_cursor_mode() to pointer release the cursor from the middle of window.
-        wx11.set_pointer_mode(CursorMode::Pointer);
+        wx11.set_pointer_mode(PointerMode::Pointer);
 
         // V16 | Window::get_cursor_mode() returns pointer.
-        assert_eq!(wx11.get_cursor_mode(), CursorMode::Pointer, "Cursor mode should be Pointer!");
-        window_x11_step_loop!("Cursor should be visible, confined and free to move...", wx11, dispatcher, receiver);
+        assert_eq!(wx11.get_pointer_properties().mode, PointerMode::Pointer, "Cursor mode should be Pointer!");
+        window_x11_step_loop!("Cursor should be visible, confined and free to move...", wx11);
 
         // V17 | Window::release_cursor() let cursor exit boundaries without error.
         wx11.release_pointer();
-        window_x11_step_loop!("Cursor should be visible, released and free to move...", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Cursor should be visible, released and free to move...", wx11);
 
         // V18 | Calling Window::release_cursor() again without error.
         wx11.release_pointer();
 
         // V19 | Window::is_cursor_confined() is false.
-        assert_eq!(wx11.is_cursor_confined(), false, "Cursor shouldn't confined!");
+        assert_eq!(wx11.get_pointer_properties().is_confined, false, "Cursor shouldn't confined!");
 
         // V20 | Make cursor hidden. Exiting window must make the cursor reappear and disappear when reentering window.
         wx11.hide_pointer();
-        window_x11_step_loop!("Exiting window must make the cursor reappear and disappear when reentering window...", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Exiting window must make the cursor reappear and disappear when reentering window...", wx11);
 
         // V21 | Make cursor confined. Losing focus should release cursor while gaining focus should confine cursor.
         wx11.show_pointer();
         wx11.confine_pointer();
-        window_x11_step_loop!("Losing focus should release cursor while gaining focus should confine cursor...", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Losing focus should release cursor while gaining focus should confine cursor...", wx11);
 
         // V22 | Make cursor mode acceleration. Losing focus should release cursor while gaining focus should confine cursor in center.
-        wx11.set_pointer_mode(CursorMode::Acceleration);
-        window_x11_step_loop!("Losing focus should release cursor while gaining focus should confine cursor in center...", wx11, dispatcher, receiver);
+        wx11.set_pointer_mode(PointerMode::Acceleration);
+        window_x11_step_loop!("Losing focus should release cursor while gaining focus should confine cursor in center...", wx11);
     });
 }
 
@@ -199,9 +199,9 @@ fn window_x11_cursor_properties() {
 /// Get and set X11 Window cursor position.
 /// 
 /// # Verification(s)
-/// V1 | Window::get_cursor_position() returns the current cursor position.
+/// V1 | Window::get_pointer_properties().position returns the current cursor position.
 /// V2 | Window::set_cursor_position() set the new position without errors.
-/// V3 | Window::get_cursor_position() returns the new position.
+/// V3 | Window::get_pointer_properties().position returns the new position.
 /// V4 | Change motion mode to Acceleration. Window::set_cursor_position() should give center.
 /// V5 | Window::set_cursor_position() set the new position without errors multiple times.
 fn window_x11_cursor_position() {
@@ -210,38 +210,38 @@ fn window_x11_cursor_position() {
         // Confine cursor for test
         wx11.confine_pointer();
 
-        // V1 | Window::get_cursor_position() returns the current cursor position.
-        let _cp = wx11.get_cursor_position();
+        // V1 | Window::get_pointer_properties().position returns the current cursor position.
+        let _cp = wx11.get_pointer_properties().position;
         thread::sleep(WAIT_MS);
 
         // V2 | Window::set_cursor_position() set the new position without errors.
         wx11.set_pointer_position((CURSOR_X / 2, CURSOR_Y / 2));
         thread::sleep(WAIT_MS);
 
-        // V3 | Window::get_cursor_position() returns the new position.
-        let _cp = wx11.get_cursor_position();
+        // V3 | Window::get_pointer_properties().position returns the new position.
+        let _cp = wx11.get_pointer_properties().position;
         assert_eq!(_cp.0, CURSOR_X / 2, "Cursor X expect {} and not {}!", CURSOR_X / 2, _cp.0);
         assert_eq!(_cp.1, CURSOR_Y / 2, "Cursor Y expect {} and not {}!", CURSOR_Y / 2, _cp.1);
         thread::sleep(WAIT_MS);
 
         // V4 | Change motion mode to Acceleration. Window::set_cursor_position() should give center.
-        wx11.set_pointer_mode(CursorMode::Acceleration);
+        wx11.set_pointer_mode(PointerMode::Acceleration);
 
-        let _cp = wx11.get_cursor_position();
+        let _cp = wx11.get_pointer_properties().position;
         assert_eq!(_cp.0, CURSOR_X, "Cursor X expect {} and not {}!", CURSOR_X, _cp.0);
         assert_eq!(_cp.1, CURSOR_Y, "Cursor Y expect {} and not {}!", CURSOR_Y, _cp.1);
         thread::sleep(WAIT_MS);
 
         // V5 | Window::set_cursor_position() set the new position without errors multiple times.
-        wx11.set_pointer_mode(CursorMode::Pointer);
+        wx11.set_pointer_mode(PointerMode::Pointer);
         for i in 0..255 {
             wx11.set_pointer_position((i * 2,i ));
             
-            let _cp = wx11.get_cursor_position();
+            let _cp = wx11.get_pointer_properties().position;
             assert_eq!(_cp.0, i * 2, "Cursor X expect {} and not {}!", i * 2, _cp.0);
             assert_eq!(_cp.1, i , "Cursor Y expect {} and not {}!", i , _cp.1);
 
-            wx11.dispatch_events(&mut dispatcher, true);
+            dispatch_events(&mut wx11);
 
             thread::sleep(WAIT_MS);
         }
@@ -256,24 +256,24 @@ fn window_x11_cursor_position() {
 /// Get and set X11 Window position.
 /// 
 /// # Verification(s)
-/// V1 | Window::get_position() gives default position.
+/// V1 | Window::get_window_properties().position gives default position.
 /// V2 | Window::set_position() work without error.
-/// V3 | Window::get_position() return new position.
+/// V3 | Window::get_window_properties().position return new position.
 /// V4 | Window::set_position() multiple time work without error.
 fn window_x11_position() {
     window_x11_prepare!(wx11{
-        // V1 | Window::get_position() gives default position.
-        let pos = wx11.get_position();
-        assert!(pos.0 == wx11.get_position().0, "Default Position X error!");
-        assert!(pos.1 == wx11.get_position().1, "Default Position Y error!");
+        // V1 | Window::wx11.get_window_properties().position gives default position.
+        let pos = wx11.get_window_properties().position;
+        assert!(pos.0 == wx11.get_window_properties().position.0, "Default Position X error!");
+        assert!(pos.1 == wx11.get_window_properties().position.1, "Default Position Y error!");
         thread::sleep(WAIT_MS);
 
         // V2 | Window::set_position() work without error.
         wx11.set_position((WINDOW_POS_X,WINDOW_POS_Y));
         thread::sleep(WAIT_MS);
 
-        // V3 | Window::get_position() return new position.
-        let pos = wx11.get_position();
+        // V3 | Window::wx11.get_window_properties().position return new position.
+        let pos = wx11.get_window_properties().position;
         assert!(pos.0 == WINDOW_POS_X, "New Position X error!");
         assert!(pos.1 == WINDOW_POS_Y, "New Position Y error!");
         thread::sleep(WAIT_MS);
@@ -283,11 +283,11 @@ fn window_x11_position() {
             wx11.set_position((i * 5,i * 2));
             
 
-            let pos = wx11.get_position();
+            let pos = wx11.get_window_properties().position;
             assert!(pos.0 == i * 5, "New Position X error!");
             assert!(pos.1 == i * 2, "New Position Y error!");
 
-            wx11.dispatch_events(&mut dispatcher, true);
+            dispatch_events(&mut wx11);
 
             thread::sleep(WAIT_MS);
 
@@ -314,7 +314,7 @@ fn window_x11_position() {
 fn window_x11_size() {
     window_x11_prepare!(wx11 {
         // V1 | Window::get_size() returns the default size.
-        let size = wx11.get_size();
+        let size = wx11.get_window_properties().size;
         assert_eq!(size.0, WINDOW_WIDTH, "Width expect {} and not {}!", WINDOW_WIDTH, size.0);
         assert_eq!(size.1, WINDOW_HEIGHT, "Height expect {} and not {}!", WINDOW_HEIGHT, size.1);
 
@@ -334,7 +334,7 @@ fn window_x11_size() {
         assert_ok!(wx11.set_size((WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)));
 
         // V7 | Window::set_size() return new size.
-        let size = wx11.get_size();
+        let size = wx11.get_window_properties().size;
         assert_eq!(size.0, WINDOW_MIN_WIDTH, "Width expect {} and not {}!", WINDOW_MIN_WIDTH, size.0);
         assert_eq!(size.1, WINDOW_MIN_HEIGHT, "Height expect {} and not {}!", WINDOW_MIN_HEIGHT, size.1);
 
@@ -342,7 +342,7 @@ fn window_x11_size() {
         assert_ok!(wx11.set_size((WINDOW_MAX_WIDTH, WINDOW_MAX_HEIGHT)));
         
         // V9 | Window::set_size() return new size.
-        let size = wx11.get_size();
+        let size = wx11.get_window_properties().size;
         assert_eq!(size.0, WINDOW_MAX_WIDTH, "Width expect {} and not {}!", WINDOW_MAX_WIDTH, size.0);
         assert_eq!(size.1, WINDOW_MAX_HEIGHT, "Height expect {} and not {}!", WINDOW_MAX_HEIGHT, size.1);
 
@@ -351,11 +351,11 @@ fn window_x11_size() {
             assert_ok!(wx11.set_size((WINDOW_MIN_WIDTH + i,WINDOW_MIN_HEIGHT + i)));
             
 
-            let size = wx11.get_size();
+            let size = wx11.get_window_properties().size;
             assert_eq!(size.0, WINDOW_MIN_WIDTH + i, "Width expect {} and not {}!", WINDOW_MIN_WIDTH + i, size.0);
             assert_eq!(size.1, WINDOW_MIN_HEIGHT + i, "Height expect {} and not {}!", WINDOW_MIN_HEIGHT + i, size.1);
 
-            wx11.dispatch_events(&mut dispatcher, true);
+            dispatch_events(&mut wx11);
 
             thread::sleep(WAIT_MS);
 
@@ -377,13 +377,13 @@ fn window_x11_size() {
 fn window_x11_title() {
     window_x11_prepare!(wx11 {
         // V1 | Window::get_title() returns the default title.
-        assert_eq!(wx11.get_title(), "", "Default title error!");
+        assert_eq!(wx11.get_window_properties().title, "", "Default title error!");
 
         // V2 | Window::set_title() set the new title without errors.
         wx11.set_title(WINDOW_TITLE);
 
         // V3 | Window::get_title() returns the new title.
-        assert_eq!(wx11.get_title(), WINDOW_TITLE, "Title expect {:?} and not {:?}!", WINDOW_TITLE, wx11.get_title());
+        assert_eq!(wx11.get_window_properties().title, WINDOW_TITLE, "Title expect {:?} and not {:?}!", WINDOW_TITLE, wx11.get_window_properties().title);
 
         // V4 | Window::set_title() multiple time without error.
         for i in 0..255 {
@@ -412,20 +412,21 @@ fn window_x11_fullscreen_restore() {
         wx11.set_title("Default");
         
         // V1 | Window::is_fullscreen(), is_maximized(), is_minimized() all returns false as default.
-        assert!(!wx11.is_fullscreen() && !wx11.is_maximized() && !wx11.is_minimized(), "is_fullscreen(), is_maximized(),is_minimized should all be false!");
+        assert!(!wx11.get_window_properties().is_fullscreen && !wx11.get_window_properties().is_maximized && !wx11.get_window_properties().is_minimized, "is_fullscreen(), is_maximized(),is_minimized should all be false!");
 
-        window_x11_step_loop!("Window is now at default. Press SPACE to set full screen.", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Window is now at default. Press SPACE to set full screen.", wx11);
 
         // V2 | Window::set_fullscreen() work without error and window now fullscreen.
         wx11.set_fullscreen(FullscreenMode::CurrentScreen);
 
         wx11.set_title("Fullscreen");
         
-        window_x11_step_loop!("Window should now be fullscreen. Press SPACE to restore.", wx11, dispatcher, receiver);
-
+        window_x11_step_loop!("Window should now be fullscreen. Press SPACE to restore.", wx11);
         
         // V3 | Window::is_fullscreen() = true, is_maximized() = false, is_minimized() = false.
-        assert!(wx11.is_fullscreen() && !wx11.is_maximized() && !wx11.is_minimized(), "Only is_fullscreen() should be true!");
+        assert!(wx11.get_window_properties().is_fullscreen && wx11.get_window_properties().is_maximized && !wx11.get_window_properties().is_minimized, 
+            "Only is_fullscreen() should be true! FC={}, MIN={}, MAX={}", wx11.get_window_properties().is_fullscreen,
+            wx11.get_window_properties().is_minimized, wx11.get_window_properties().is_maximized);
  
         // V4 | Window::restore() work without error and window now restored.
         wx11.restore();
@@ -433,12 +434,12 @@ fn window_x11_fullscreen_restore() {
         wx11.set_title("Restored");
 
 
-        window_x11_step_loop!("Window should now be restored. Press SPACE to continue.", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Window should now be restored. Press SPACE to continue.", wx11);
 
         /*
         // V5 | Window::is_fullscreen() = false, is_maximized() = false, is_minimized() = false.
         assert!(!wx11.is_fullscreen() && !wx11.is_maximized() && !wx11.is_minimized(), "is_fullscreen(), is_maximized(),is_minimized should all be false!");
-        window_x11_step_loop!("Window should now be restored. Press SPACE for stress.", wx11, dispatcher, receiver);
+        window_x11_step_loop!("Window should now be restored. Press SPACE for stress.", wx11);
 
         // V6 | Window::set_fullscreen() called multiple time without error.
         for _ in 0..100 {
@@ -470,17 +471,30 @@ fn window_x11_fullscreen_restore() {
 
 #[test]
 #[ignore = "User interaction"]
+#[allow(unreachable_code)]
 /// Window Close button handle.
 /// 
 /// # Verification(s)
 /// V1 | Window close button is handled without crash.
 fn window_x11_close() {
 
-    window_x11_prepare!(wx11, dispatcher, receiver, {
+    window_x11_prepare!(wx11 {
         // V1 | Window close button is handled without crash.
+        println!("\x1b[93m{}\x1b[0m", "Click the Window X (close) button.");
 
-
-        window_x11_step_loop!("Click the Window X (close) button.", wx11, dispatcher, receiver);
+        loop {
+            loop {
+                let event = wx11.poll_event();
+    
+                match event {
+                    studio::display::desktop::event::Event::Window(window_event) => match window_event {
+                        studio::display::desktop::event::EventWindow::Close() => exit(0),
+                        _ => {},
+                    },
+                    _ => {},
+                }
+            }
+        }
     });
 
 }

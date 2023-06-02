@@ -3,13 +3,50 @@ use std::ffi::{ CString, c_int };
 use std::{panic::catch_unwind};
 
 use crate::display::desktop::pointer::{PointerMode, PointerProperty};
-use crate::display::desktop::window::{ Window, FullscreenMode};
+use crate::display::desktop::window::{ Window, FullscreenMode, WindowProperty};
+use crate::error::StudioError;
 use super::cbind::{attributes::*, constants::*, functs::*, structs::* };
 
 use super::super::super::super::screen::{ScreenList, Screen};
 use super::super::super::super::event::{ Event };
 use super::super::WindowProvider; 
 use super::atom::X11Atoms;
+
+/// Pointer left button index for X11
+const POINTER_LEFT_BUTTON: u8 = 1;
+
+/// Pointer middle button index for X11
+const POINTER_MIDDLE_BUTTON: u8 = 2;
+
+/// Pointer right button index for X11
+const POINTER_RIGHT_BUTTON: u8 = 3;
+
+/// Pointer previous button index for X11
+const POINTER_PREVIOUS_BUTTON: u8 = 8;
+
+/// Pointer next button index for X11
+const POINTER_NEXT_BUTTON: u8 = 9;
+
+/// Pointer scroll up index for X11
+const POINTER_SCROLL_UP: u8 = 4;
+
+/// Pointer scroll down index for X11
+const POINTER_SCROLL_DOWN: u8 = 5;
+
+/// Pointer scroll left index for X11
+const POINTER_SCROLL_LEFT: u8 = 6;
+
+/// Pointer scroll right index for X11
+const POINTER_SCROLL_RIGHT: u8 = 7;
+
+
+
+/*
+const EVENT_MASK : i64 = NoEventMask | KeyPressMask |KeyReleaseMask|ButtonPressMask|ButtonReleaseMask|EnterWindowMask|LeaveWindowMask|PointerMotionMask|
+PointerMotionHintMask|Button1MotionMask|Button2MotionMask|Button3MotionMask|Button4MotionMask|Button5MotionMask|ButtonMotionMask|KeymapStateMask|
+ExposureMask|VisibilityChangeMask|StructureNotifyMask|ResizeRedirectMask|SubstructureNotifyMask|SubstructureRedirectMask|FocusChangeMask|PropertyChangeMask|
+ColormapChangeMask|OwnerGrabButtonMask;
+*/
 
 /// Event mask used with x11 to capture and dispatch event.
 const EVENT_MASK : i64 =    KeyPressMask | KeyReleaseMask |             // Keyboard Button Down and Up
@@ -22,6 +59,7 @@ const EVENT_MASK : i64 =    KeyPressMask | KeyReleaseMask |             // Keybo
                             StructureNotifyMask |                       // ResizeRedirectMask |
                             VisibilityChangeMask | FocusChangeMask |
                             PropertyChangeMask | ExposureMask;          // Window event I guess??
+                            
 
 
 
@@ -53,26 +91,14 @@ pub struct X11Window {
     /// Window handle pointer
     pub(crate) window : *mut X11Handle,
 
-    /// Current position of the window
-    pub(crate) position : (i32,i32),
-
-    /// Current size of the window
-    pub(crate) size : (u32,u32),
-
-    /// Current center of the window
-    pub(crate) center : (i32,i32),
-
+    /// Window properties
+    pub(crate) property : WindowProperty,
+ 
     /// Pointer properties
     pub(crate) pointer : PointerProperty,
 
-    /// Is window set fullscreen?
-    pub(crate) is_fullscreen : bool,
-
     /// Atoms for handling x11 window properties
     pub(crate) atoms : X11Atoms,
-
-    /// Flag used to make sure XHideCursor was called prior to XShowCursor to prevent crash
-    pub(crate) x_hide_cursor_flag : bool,
 
     /// Position and size for restoring window.
     pub(crate) restoration_position_size : ((i32,i32),(u32,u32)),
@@ -91,25 +117,23 @@ impl X11Window {
         unsafe {
             let screens = ScreenList::from_provider(WindowProvider::X11).unwrap();
             let display = XOpenDisplay(std::ptr::null());     // Display connection
-            let atoms = X11Atoms::new(display);     // X11 Atoms
+            let mut atoms = X11Atoms::new(display);     // X11 Atoms
             let position = Self::start_position(screens.get_primary_screen().unwrap(), (width, height));    // Window startup position
             let root = Self::get_x11_default_root_window(display);  // Root window
+            let property = WindowProperty::new(position, (width, height));
 
             X11Window{ 
                 x_event: XEvent{ _type:0 }, 
                 wm_title: CString::new("").unwrap(), 
                 display, //: XOpenDisplay(std::ptr::null()), 
-                window: Self::create_x11_window(display, root, &atoms, position, (width, height), false), 
+                window: Self::create_x11_window(display, root, &mut atoms, position, (width, height), false), 
                 atoms,
-                x_hide_cursor_flag: false,
                 restoration_position_size: (position, (width, height)),
                 screens,
                 event_count: 0,
-                position,
-                size: (width, height),
-                center: (width as i32 /2, height as i32 /2),
-                pointer: PointerProperty::new(),
-                is_fullscreen: false, 
+                pointer: PointerProperty::new(POINTER_LEFT_BUTTON,POINTER_RIGHT_BUTTON,POINTER_MIDDLE_BUTTON,POINTER_NEXT_BUTTON,
+                    POINTER_PREVIOUS_BUTTON, POINTER_SCROLL_UP, POINTER_SCROLL_DOWN, POINTER_SCROLL_LEFT, POINTER_SCROLL_RIGHT),
+                property,
             }
         }
     }
@@ -186,8 +210,8 @@ impl Window for X11Window {
 
          match mode {
             // Set cursor to center if Acceleration
-            PointerMode::Acceleration => self.set_pointer_position(self.center),
-            _ => todo!(),
+            PointerMode::Acceleration => self.set_pointer_position(self.property.center),
+            _ => {},
         }
     }
 
@@ -199,6 +223,7 @@ impl Window for X11Window {
 
     fn set_pointer_position(&mut self, position : (i32, i32)) {
         unsafe {
+            self.pointer.position = position;
             XWarpPointer(self.display, self.window, self.window, 0, 0, 
                 0, 0, position.0,  position.1);
         }
@@ -206,22 +231,25 @@ impl Window for X11Window {
 
     fn hide_pointer(&mut self) {
         unsafe {
-            XFixesHideCursor(self.display, self.window);
-            self.x_hide_cursor_flag = true;
+            if self.pointer.is_visible {
+                self.pointer.is_visible = false;
+                XFixesHideCursor(self.display, self.window);
+            }
         }
     }
 
     fn show_pointer(&mut self)  {
         unsafe {
-            if self.x_hide_cursor_flag {    // Make sure X hide cursor was called prior to show.
+            if !self.pointer.is_visible {    // Make sure X hide cursor was called prior to show.
                 XFixesShowCursor(self.display, self.window);
-                self.x_hide_cursor_flag = false;
+                self.pointer.is_visible = true;
             }       
         }
     }
 
     fn confine_pointer(&mut self) {
         unsafe {
+            self.pointer.is_confined = true;
             XGrabPointer(self.display, self.window, true, 
             0, GrabModeAsync.try_into().unwrap(), GrabModeAsync.try_into().unwrap(), self.window, 0, CurrentTime);
         }
@@ -229,6 +257,7 @@ impl Window for X11Window {
 
     fn release_pointer(&mut self) {
         unsafe {
+            self.pointer.is_confined = false;
             XUngrabPointer(self.display, CurrentTime);
         }
     }
@@ -239,7 +268,7 @@ impl Window for X11Window {
             XDestroyWindow(self.display, self.window);
 
             // Recreate window as normal
-            self.window = X11Window::create_x11_window(self.display, XDefaultRootWindow(self.display), &self.atoms, self.restoration_position_size.0,
+            self.window = X11Window::create_x11_window(self.display, XDefaultRootWindow(self.display), &mut self.atoms, self.restoration_position_size.0,
                 self.restoration_position_size.1, false);   
 
             self.set_position(self.restoration_position_size.0);
@@ -248,20 +277,27 @@ impl Window for X11Window {
 
     fn set_title(&mut self, title : &str) {
         unsafe {
+            self.property.title = String::from(title);
             self.wm_title = CString::from_vec_unchecked(title.as_bytes().to_vec());
             XStoreName(self.display, self.window, self.wm_title.as_ptr() as *mut i8);
         }
     }
 
-    fn set_size(&mut self, size : (u32, u32)) {
-        unsafe {
-            // Keep real window position
-            self.restoration_position_size.0 = X11Window::get_x11_window_position(self.display, self.window);
+    fn set_size(&mut self, size : (u32, u32)) -> Result<(u32, u32), StudioError> {
+        if WindowProperty::is_size_within_boundaries(size){
+            unsafe {
+                // Keep real window position
+                self.restoration_position_size.0 = X11Window::get_x11_window_position(self.display, self.window);
 
-            XResizeWindow(self.display, self.window, size.0, size.1);
-            
-            // Reposition window since resize put it back at 0,0
-            self.set_position(self.restoration_position_size.0);
+                XResizeWindow(self.display, self.window, size.0, size.1);
+                
+                // Reposition window since resize put it back at 0,0
+                self.set_position(self.restoration_position_size.0);
+
+                Ok(size)
+            }
+        } else {
+            Err(StudioError::Display(crate::display::error::DisplayError::SizeError))
         }
     }
 
@@ -274,9 +310,9 @@ impl Window for X11Window {
     fn set_fullscreen(&mut self, fs_mode : FullscreenMode) {
         unsafe {
 
-            if !self.is_fullscreen {
+            if !self.property.is_fullscreen {
                 // Save windowed properties for restoration.
-                self.restoration_position_size = (X11Window::get_x11_window_position(self.display, self.window), self.size);
+                self.restoration_position_size = (X11Window::get_x11_window_position(self.display, self.window), self.property.size);
             }
 
             // Destroy current window
@@ -286,13 +322,13 @@ impl Window for X11Window {
                 FullscreenMode::CurrentScreen => {
                     // Recreate window as fullscreen
                     self.window = X11Window::create_x11_window(self.display, XDefaultRootWindow(self.display),
-                     &self.atoms, (0,0),   self.screens.get_primary_screen().unwrap().get_current_resolution(), true);      
+                     &mut self.atoms, (0,0),   self.screens.get_primary_screen().unwrap().get_current_resolution(), true);      
                 },
                 FullscreenMode::PrimaryScreen => {
-
+                    todo!()
                 },
                 FullscreenMode::DesktopScreen => {
-
+                    todo!()
                 },
             }
 
@@ -373,29 +409,14 @@ impl Window for X11Window {
         }
     }
 
-    fn get_pointer_mode(&self) {
-        todo!()
+    fn get_window_properties(&self) -> &crate::display::desktop::window::WindowProperty {
+        &self.property
     }
 
-    fn get_pointer_position(&self) -> (i32, i32) {
-        todo!()
+    fn get_pointer_properties(&self) -> &PointerProperty {
+        &self.pointer
     }
 
-    fn get_title(&self) -> &str {
-        todo!()
-    }
-
-    fn get_size() ->  (u32, u32) {
-        todo!()
-    }
-
-    fn get_position() ->  (i32, i32) {
-        todo!()
-    }
-
-    fn is_fullscreen() -> bool {
-        todo!()
-    }
 
     
 
@@ -407,7 +428,7 @@ impl Window for X11Window {
 impl X11Window {
     /// Create x11 Window according to position, size and if fullscreen or not.
     #[inline(always)]
-    pub fn create_x11_window(display : *mut X11Display, root : *mut X11Handle, atoms : &X11Atoms, position : (i32, i32), 
+    pub fn create_x11_window(display : *mut X11Display, root : *mut X11Handle, atoms : &mut X11Atoms, position : (i32, i32), 
         size : (u32,u32), fullscreen : bool) -> *mut X11Handle {
         unsafe {
             let window = XCreateSimpleWindow(display, root, position.0,position.1,
@@ -415,6 +436,9 @@ impl X11Window {
 
             // Set window Type to normal
             x11_change_property!(display, window, atoms, _NET_WM_WINDOW_TYPE, _NET_WM_WINDOW_TYPE_NORMAL);
+
+            // Set window protocols to capture window closing
+            XSetWMProtocols(display, window, &mut atoms.WM_DELETE_WINDOW, 1);
 
             // Allowed actions
             x11_change_property!(display, window, atoms, _NET_WM_ALLOWED_ACTIONS, _NET_WM_ACTION_FULLSCREEN, _NET_WM_ACTION_MINIMIZE, _NET_WM_ACTION_CHANGE_DESKTOP,

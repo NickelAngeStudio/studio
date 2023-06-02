@@ -2,9 +2,12 @@
 
 use std::{ffi::{c_int, c_ulong, c_char, CStr}, ptr::null_mut};
 
-use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}, pointer::PointerMode, provider::linux::x11::cbind::functs::XGetAtomName};
+use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}, pointer::PointerMode, provider::linux::x11::cbind::functs::XGetAtomName, window::Window};
 
 use super::{X11Window, cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree}}};
+
+/// Constant value of the window closing message.
+pub const WINDOW_CLOSING_MESSAGE_TYPE:u64 = 327;
 
 impl X11Window {
 
@@ -12,6 +15,9 @@ impl X11Window {
     #[inline(always)]
     pub fn get_key_press_event(&self, xevent : &XEvent) -> Event {
         unsafe {
+            #[cfg(debug_assertions)]
+            println!("EventKeyboard::KeyDown({})", xevent._xkey._keycode); 
+
             Event::Keyboard(EventKeyboard::KeyDown(xevent._xkey._keycode))
         }
     }
@@ -20,6 +26,9 @@ impl X11Window {
     #[inline(always)]
     pub fn get_key_release_event(&self, xevent : &XEvent) -> Event {
         unsafe {
+            #[cfg(debug_assertions)]
+            println!("EventKeyboard::KeyUp({})", xevent._xkey._keycode); 
+
             Event::Keyboard(EventKeyboard::KeyUp(xevent._xkey._keycode))
         }
     }
@@ -29,6 +38,9 @@ impl X11Window {
     #[inline(always)]
     pub fn get_button_press_event(&self, xevent : &XEvent) -> Event {
         unsafe {
+            #[cfg(debug_assertions)]
+            println!("EventMouse::ButtonDown({})", xevent._xbutton._button); 
+
             Event::Mouse(EventMouse::ButtonDown(xevent._xbutton._button.try_into().unwrap() , (xevent._xbutton._x, xevent._xbutton._y)))
         }
     }
@@ -38,24 +50,35 @@ impl X11Window {
     #[inline(always)]
     pub fn get_button_release_event(&self, xevent : &XEvent) -> Event {
         unsafe {
+            #[cfg(debug_assertions)]
+            println!("EventMouse::ButtonUp({})", xevent._xbutton._button); 
+
             Event::Mouse(EventMouse::ButtonUp(xevent._xbutton._button.try_into().unwrap() , (xevent._xbutton._x, xevent._xbutton._y)))
         }
     }
 
-    /// Get Event created from MotionNotify (cursor moved)
+    /// Get Event created from MotionNotify.
+    /// Happens when pointer is moving over window
     #[inline(always)]
-    pub fn get_motion_notify_event(&self, xevent : &XEvent) -> Event {
+    pub fn get_motion_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
-            match self.property.cursor.mode {   
-                PointerMode::Pointer => Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y))),
+            match self.pointer.mode {   
+                PointerMode::Pointer => {
+                    self.pointer.position = (xevent._xmotion._x, xevent._xmotion._y);
+                    Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y)))
+                },
                 PointerMode::Acceleration => {
                     let position = (xevent._xmotion._x - self.property.center.0, 
                         xevent._xmotion._y - self.property.center.1);
                     // Report acceleration only if movement occurred
                     if position.0 != 0 || position.1 != 0 {
+                        // Re-center pointer
+                        self.set_pointer_position(self.property.center);
+
+                        // Return position
                         Event::Mouse(EventMouse::Moved(position))
                     } else {
-                        Event::None
+                        self.poll_event()
                     }
                 }
             }
@@ -63,30 +86,53 @@ impl X11Window {
     }
 
     /// Get Event created from EnterNotify.
-    /// Cursor entered window
+    /// Pointer entered window
     #[inline(always)]
-    pub fn get_enter_notify_event(&self, _xevent : &XEvent) -> Event {
+    pub fn get_enter_notify_event(&mut self, _xevent : &XEvent) -> Event {
+        // Hide cursor if supposed to be hidden.
+        if !self.pointer.is_visible {
+            self.pointer.is_visible = true;
+            self.hide_pointer();
+        }
+
         Event::Window(EventWindow::CursorEnter())
     }
 
     /// Get Event created from LeaveNotify
-    /// Cursor left window
+    /// Pointer left window
     #[inline(always)]
-    pub fn get_leave_notify_event(&self, _xevent : &XEvent) -> Event {
+    pub fn get_leave_notify_event(&mut self, _xevent : &XEvent) -> Event {
+         // Show hidden cursor when out of window.
+         if !self.pointer.is_visible {
+            self.show_pointer();
+            self.pointer.is_visible = false;    // Tell pointer it is still hidden
+        }
+
         Event::Window(EventWindow::CursorLeave())
     }
 
     /// Get Event created from FocusIn
     /// Window got focus.
     #[inline(always)]
-    pub fn get_focus_in_event(&self, _xevent : &XEvent) -> Event {
+    pub fn get_focus_in_event(&mut self, _xevent : &XEvent) -> Event {
+        // If cursor is confined, confine cursor on focus.
+        if self.pointer.is_confined {
+            self.confine_pointer();
+        }
+
         Event::Window(EventWindow::Focus())
     }
 
     /// Get Event created from FocusOut
     /// Window lost focus
     #[inline(always)]
-    pub fn get_focus_out_event(&self, _xevent : &XEvent) -> Event {
+    pub fn get_focus_out_event(&mut self, _xevent : &XEvent) -> Event {
+        // If cursor is confined, confine cursor on focus.
+        if self.pointer.is_confined {
+            self.release_pointer();
+            self.pointer.is_confined = true;    // Tell pointer it is still confined
+        }
+
         Event::Window(EventWindow::Blur())
     }
 
@@ -474,9 +520,10 @@ impl X11Window {
     #[inline(always)]
     pub fn get_client_message_event(&self, xevent : &XEvent) -> Event {
         unsafe {
-            #[cfg(debug_assertions)]
-            println!("Display({:p}), ClientMessage({})", self, xevent._type); 
-            Event::Unknown
+            match xevent._xclient._message_type {
+                WINDOW_CLOSING_MESSAGE_TYPE => Event::Window(EventWindow::Close()),
+                _ => Event::Unknown,
+            }
         }
     }
 

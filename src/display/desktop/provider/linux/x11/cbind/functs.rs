@@ -227,6 +227,13 @@ extern {
     /// Reference(s)
     /// <https://www.x.org/releases/X11R7.7/doc/libX11/libX11/libX11.html#XScreenOfDisplay>
     pub(crate) fn XScreenOfDisplay(x11display : *mut X11Display, screen_number : c_int) -> *const Screen;
+
+    /// The XSetWMProtocols function replaces the WM_PROTOCOLS property on the specified window with the list of atoms specified by the protocols argument.
+    /// 
+    /// Reference(s)
+    /// <https://www.x.org/releases/X11R7.5/doc/man/man3/XSetWMProtocols.3.html>
+    pub(crate) fn XSetWMProtocols(x11display : *mut X11Display, w : *mut X11Handle, protocols : *mut Atom, count : c_int);
+
     
 }
 
