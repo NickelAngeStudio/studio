@@ -24,21 +24,61 @@ pub struct PointerProperty {
     pub position : (i32, i32),
 
     /// Indicate if cursor is visible or hidden.
-    pub visible : bool,
+    pub is_visible : bool,
 
     /// Indicate if cursor is confined to the window boundaries or not.
-    pub confined : bool, 
+    pub is_confined : bool, 
+
+    /// Index of the left button
+    pub left_button : u8,
+
+    /// Index of the right button
+    pub right_button : u8,
+
+    /// Index of the middle button
+    pub middle_button : u8,
+
+    /// Index of the next button
+    pub next_button: u8,
+
+    /// Index of the previous button
+    pub previous_button : u8,
+
+    /// Index of the scroll up button
+    pub scroll_up : u8,
+
+    /// Index of the scroll down button
+    pub scroll_down : u8,
+
+    /// Index of the scroll left button
+    pub scroll_left : u8,
+
+    /// Index of the scroll right button
+    pub scroll_right : u8,
+
+
+
 }
 
 
 impl PointerProperty {
     /// Create a new [PointerProperty] with default values.
-    pub fn new() -> PointerProperty {
+    pub fn new(left_button : u8, right_button : u8, middle_button : u8, next_button: u8, previous_button : u8,
+        scroll_up: u8, scroll_down: u8, scroll_left:u8, scroll_right:u8) -> PointerProperty {
         PointerProperty{ 
             mode: PointerMode::Pointer, 
             position: (0,0), 
-            visible: true, 
-            confined: false
+            is_visible: true, 
+            is_confined: false,
+            left_button,
+            right_button,
+            middle_button,
+            next_button,
+            previous_button,
+            scroll_up,
+            scroll_down,
+            scroll_left,
+            scroll_right,
         }
     }
 

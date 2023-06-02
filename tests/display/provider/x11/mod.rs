@@ -1,9 +1,12 @@
+use std::process::exit;
+
+use studio::display::desktop::{window::Window, event::{Event, EventKeyboard}};
+
 /// X11 Window Manager property tests
 pub mod property;
 
 /// X11 Window Event tests
 pub mod event;
-
 
 /*********
 * MACROS *
@@ -44,145 +47,43 @@ macro_rules! window_x11_step_loop {
 
     // Without message
     ($window:ident) => {{
-        'outer: loop {
-            'inner: loop {
-                let event = $window.poll_event();
-
-                match event {
-                    WindowEvent::Keyboard(event) => match event {
-                        WindowEventKeyboard::KeyDown(keycode) => 
-                        {        
-                            println!("KeyCode={}", keycode);
-                            if *keycode == 65 {
-                                break 'outer;   // Break outer loop
-                            }
-        
-                            if *keycode == self.exit_key {
-                                exit(0);    // Exit test
-                            }
-                            false
-                        },
-                        WindowEventKeyboard::KeyUp(_) => { false },
-                    },
-
-                    WindowEvent::None => break 'inner,     // Break inner loop
-                _   => {},
-                }
-            }
-        }
+        dispatch_events(&mut $window);
     }};
 
     // With message
     ($message:expr, $window:ident) => {{
         println!("\x1b[93m{}\x1b[0m", $message);
 
-        'outer: loop {
-            'inner: loop {
-                let event = $window.poll_event();
-
-                match event {
-                    Event::Keyboard(event) => match event {
-                        EventKeyboard::KeyDown(keycode) => 
-                        {        
-                            println!("KeyCode={}", keycode);
-                            if keycode == 65 {
-                                break 'outer;   // Break outer loop
-                            }
-        
-                            if keycode == 9 {
-                                exit(0);    // Exit test
-                            }
-
-                        },
-                        EventKeyboard::KeyUp(_) => { },
-                    },
-
-                    Event::None => break 'inner,     // Break inner loop
-                _   => {},
-                }
-            }
-        }
-        //$receiver.borrow_mut().set_state(crate::display::provider::x11::WindowEventReceiverControlState::Running);
+        dispatch_events(&mut $window);
     }};
 }
 
+/************
+* FUNCTIONS *
+************/
+pub fn dispatch_events(window: &mut dyn Window){
+    'outer: loop {
+        'inner: loop {
+            let event = window.poll_event();
 
-/*********
-* STRUCT *
-*********/
-/*
-/// Enumeration of WindowEventReceiverControlResult state.
-#[derive(Debug, Clone, Copy)]
-enum WindowEventReceiverControlState {
-
-    // Test is running
-    Running,
-
-    // Tell receiver to get to next step
-    NextStep,
-
-    // Exit program
-    Exit,
-}
-
-
-/// Receiver used to control test since all tests are runned manually.
-/// 
-/// Pressing step_key to exit step loop.
-/// Pressing Esc will exit the program.
-struct WindowEventReceiverControl {
-    /// Key to press for next step
-    step_key : u32,
-
-    /// Key to press to exit
-    exit_key : u32,
-
-
-    /// State
-    state : WindowEventReceiverControlState,
-}
-
-impl WindowEventReceiverControl {
-    pub fn new(step_key : u32, exit_key : u32) -> WindowEventReceiverControl {
-        WindowEventReceiverControl { step_key, exit_key, state : WindowEventReceiverControlState::Running }
-    }
-
-    pub fn get_state(&self) -> WindowEventReceiverControlState {
-        self.state
-    }
-
-    pub fn set_state(&mut self, state : WindowEventReceiverControlState)  {
-        self.state = state
-    }
-}
-
-impl WindowEventReceiver for WindowEventReceiverControl {
-    fn handle_event(&mut self, event : &WindowEvent) -> bool {
-        match event {
-            WindowEvent::Keyboard(event) => match event {
-            WindowEventKeyboard::KeyDown(keycode) => 
-                {
-                    println!("Keydown={}", keycode);
-                    self.state = WindowEventReceiverControlState::Running;
-
-                    println!("KeyCode={}", keycode);
-                    if *keycode == self.step_key {
-                        self.state = WindowEventReceiverControlState::NextStep;
-                    }
-
-                    if *keycode == self.exit_key {
-                        self.state = WindowEventReceiverControlState::Exit;
-                    }
-                    false
+            match event {
+                Event::Keyboard(event) => match event {
+                    EventKeyboard::KeyDown(keycode) => 
+                    {        
+                        if keycode == 65 {
+                            break 'outer;   // Break outer loop
+                        }
+    
+                        if keycode == 9 {
+                            exit(0);    // Exit test
+                        }
+                    },
+                    EventKeyboard::KeyUp(_) => {},
                 },
-                WindowEventKeyboard::KeyUp(_) => { false },
-            },
-            _ => false,
+
+                Event::None => break 'inner,     // Break inner loop
+            _   => {},
+            }
         }
     }
-
-    fn is_enabled(&self) -> bool {
-        true
-    }
 }
-*/
