@@ -1,5 +1,5 @@
 /// Macros for tests
-pub mod macros;
+pub mod tools;
 
 /// Display integration tests
 pub mod display;

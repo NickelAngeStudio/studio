@@ -1,2 +1,2 @@
-/// Provider tests
-pub mod provider;
+/// Desktop tests
+pub mod desktop;

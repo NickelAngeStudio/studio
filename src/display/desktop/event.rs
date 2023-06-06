@@ -17,10 +17,7 @@ pub enum Event {
     Mouse(EventMouse),
 
     /// Controller events
-    Controller(EventController),
-
-    /// Unknown/Unhandled by Kleio event
-    Unknown,
+    Controller(EventGamepad),
 }
 
 impl std::fmt::Debug for Event {
@@ -31,7 +28,6 @@ impl std::fmt::Debug for Event {
             Self::Keyboard(arg0) => f.debug_tuple("Keyboard").field(arg0).finish(),
             Self::Mouse(arg0) => f.debug_tuple("Mouse").field(arg0).finish(),
             Self::Controller(arg0) => f.debug_tuple("Controller").field(arg0).finish(),
-            Self::Unknown => write!(f, "Unknown"),
         }
     }
 }
@@ -162,9 +158,9 @@ impl std::fmt::Debug for EventMouse {
     }
 }
 
-/// Enumeration of possible controller events
+/// Enumeration of possible gamepad events
 #[derive(Copy, Clone)]
-pub enum EventController {
+pub enum EventGamepad {
 
     /// Happens when a controller device has been connected. Provides controller id.
     Connected(u8),
@@ -186,7 +182,7 @@ pub enum EventController {
 
 }
 
-impl std::fmt::Debug for EventController {
+impl std::fmt::Debug for EventGamepad {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Connected(arg0) => f.debug_tuple("Connected").field(arg0).finish(),
