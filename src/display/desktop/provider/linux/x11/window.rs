@@ -2,6 +2,7 @@ use std::thread;
 use std::ffi::{ CString, c_int };
 use std::{panic::catch_unwind};
 
+use crate::display::desktop::keyboard::KeyboardProperty;
 use crate::display::desktop::pointer::{PointerMode, PointerProperty};
 use crate::display::desktop::window::{ Window, FullscreenMode, WindowProperty};
 use crate::error::StudioError;
@@ -82,6 +83,9 @@ pub struct X11Window {
     /// Used to fetch X11 events
     pub(crate) x_event : XEvent,    
 
+    /// Retained event that will be sent next poll_event 
+    pub(crate) retained_event : Option<Event>,
+
     /// C-compatible string for window title
     pub(crate) wm_title : CString,
 
@@ -96,6 +100,9 @@ pub struct X11Window {
  
     /// Pointer properties
     pub(crate) pointer : PointerProperty,
+
+    /// Keyboard properties
+    pub(crate) keyboard : KeyboardProperty,
 
     /// Atoms for handling x11 window properties
     pub(crate) atoms : X11Atoms,
@@ -134,6 +141,8 @@ impl X11Window {
                 pointer: PointerProperty::new(POINTER_LEFT_BUTTON,POINTER_RIGHT_BUTTON,POINTER_MIDDLE_BUTTON,POINTER_NEXT_BUTTON,
                     POINTER_PREVIOUS_BUTTON, POINTER_SCROLL_UP, POINTER_SCROLL_DOWN, POINTER_SCROLL_LEFT, POINTER_SCROLL_RIGHT),
                 property,
+                retained_event: Option::None,  // No retained event for now.
+                keyboard: KeyboardProperty::new(),  
             }
         }
     }
@@ -353,60 +362,12 @@ impl Window for X11Window {
 
     #[allow(non_upper_case_globals)]
     fn poll_event(&mut self) -> Event {
-        unsafe {
-            // Get count to poll
-            if self.event_count == 0 {
-                self.sync();
-                self.event_count = self.get_event_count();
-            }
-
-            // Only if we have something to poll
-            if self.event_count > 0 {
-                self.event_count -= 1;  // Decrease event count
-                
-                XNextEvent(self.display, &mut self.x_event);
-                let xevent = self.x_event; 
-                
-                match xevent._type {
-                    KeyPress => self.get_key_press_event(&xevent),
-                    KeyRelease=> self.get_key_release_event(&xevent),
-                    ButtonPress=> self.get_button_press_event(&xevent),
-                    ButtonRelease=> self.get_button_release_event(&xevent),
-                    MotionNotify=> self.get_motion_notify_event(&xevent),  
-                    EnterNotify=> self.get_enter_notify_event(&xevent),
-                    LeaveNotify=> self.get_leave_notify_event(&xevent),
-                    FocusIn=> self.get_focus_in_event(&xevent),
-                    FocusOut=> self.get_focus_out_event(&xevent),
-                    KeymapNotify=> self.get_keymap_notify_event(&xevent),
-                    Expose=> self.get_expose_event(&xevent),
-                    GraphicsExpose=> self.get_graphics_expose_event(&xevent),
-                    NoExpose=> self.get_no_expose_event(&xevent),
-                    VisibilityNotify=> self.get_visibility_notify_event(&xevent),
-                    CreateNotify=> self.get_create_notify_event(&xevent),
-                    DestroyNotify=> self.get_destroy_notify_event(&xevent),
-                    UnmapNotify=> self.get_unmap_notify_event(&xevent),
-                    MapNotify=> self.get_map_notify_event(&xevent),
-                    MapRequest=> self.get_map_request_event(&xevent),
-                    ReparentNotify=> self.get_reparent_notify_event(&xevent),
-                    ConfigureNotify=> self.get_configure_notify_event(&xevent),
-                    ConfigureRequest=> self.get_configure_request_event(&xevent),
-                    GravityNotify=> self.get_gravity_notify_event(&xevent),
-                    CirculateNotify=> self.get_circulate_notify_event(&xevent),
-                    CirculateRequest=> self.get_circulate_request_event(&xevent),
-                    PropertyNotify=> self.get_property_notify_event(&xevent),
-                    SelectionClear=> self.get_selection_clear_event(&xevent),
-                    SelectionRequest=> self.get_selection_request_event(&xevent),
-                    SelectionNotify=> self.get_selection_notify_event(&xevent),
-                    ColormapNotify=> self.get_colormap_notify_event(&xevent),
-                    ClientMessage=> self.get_client_message_event(&xevent),
-                    MappingNotify=> self.get_mapping_notify_event(&xevent),
-                    GenericEvent=> self.get_generic_event(&xevent),
-                    _ => self.get_unknown_event(&xevent),
-                }
-            } else {
-                Event::None   // Return None event
-            }
+        // Get count to poll
+        if self.event_count == 0 {
+            self.sync();
+            self.event_count = self.get_event_count();
         }
+        self.get_event()
     }
 
     fn get_window_properties(&self) -> &crate::display::desktop::window::WindowProperty {
@@ -415,6 +376,18 @@ impl Window for X11Window {
 
     fn get_pointer_properties(&self) -> &PointerProperty {
         &self.pointer
+    }
+
+    fn get_keyboard_properties(&self) -> &crate::display::desktop::keyboard::KeyboardProperty {
+        &self.keyboard
+    }
+
+    fn enable_autorepeat(&mut self) {
+        self.keyboard.auto_repeat = true;
+    }
+
+    fn disable_autorepeat(&mut self) {
+        self.keyboard.auto_repeat = false;
     }
 
 

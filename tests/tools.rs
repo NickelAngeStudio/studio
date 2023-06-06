@@ -1,3 +1,21 @@
+/// Reset console text color
+pub const RESET_CONSOLE : &str = "\x1b[0m";
+
+/// Yellow text for console
+pub const YELLOW_CONSOLE : &str = "\x1b[93m";
+
+/// Green text for console
+pub const GREEN_CONSOLE : &str = "\x1b[92m";
+
+/// Blue text for console
+pub const BLUE_CONSOLE : &str = "\x1b[94m";
+
+/// Magenta text for console
+pub const MAGENTA_CONSOLE : &str = "\x1b[95m";
+
+/// Cyan text for console
+pub const CYAN_CONSOLE : &str = "\x1b[96m";
+
 
 /// Macro used as shortcut to test correct error received on [Result].
 /// 

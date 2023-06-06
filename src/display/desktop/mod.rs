@@ -11,6 +11,9 @@ pub mod screen;
 // Pointer module
 pub mod pointer;
 
+// Keyboard properties module
+pub mod keyboard;
+
 // Window abstraction and properties
 pub mod window;
 

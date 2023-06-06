@@ -4,31 +4,136 @@ use std::{ffi::{c_int, c_ulong, c_char, CStr}, ptr::null_mut};
 
 use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}, pointer::PointerMode, provider::linux::x11::cbind::functs::XGetAtomName, window::Window};
 
-use super::{X11Window, cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree}}};
+use super::{X11Window, cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent}}};
+use super::cbind::{constants::* };
+
 
 /// Constant value of the window closing message.
 pub const WINDOW_CLOSING_MESSAGE_TYPE:u64 = 327;
 
 impl X11Window {
 
+    /// Get a formatted event according to xevent type
+    #[inline(always)]
+    #[allow(non_upper_case_globals)]
+    pub(super) fn get_event(&mut self) -> Event {
+        unsafe {
+            // Only if we have something to poll
+            if self.event_count > 0 {
+                self.event_count -= 1;  // Decrease event count
+
+                match self.retained_event {
+                    Some(event) => {
+                        self.retained_event = Option::None;
+                        event   // Return retained event
+                    },
+                    Option::None => {
+                        XNextEvent(self.display, &mut self.x_event);
+                        let xevent = self.x_event; 
+                        
+                        match xevent._type {
+                            KeyPress => self.get_key_press_event(&xevent),
+                            KeyRelease=> self.get_key_release_event(&xevent),
+                            ButtonPress=> self.get_button_press_event(&xevent),
+                            ButtonRelease=> self.get_button_release_event(&xevent),
+                            MotionNotify=> self.get_motion_notify_event(&xevent),  
+                            EnterNotify=> self.get_enter_notify_event(&xevent),
+                            LeaveNotify=> self.get_leave_notify_event(&xevent),
+                            FocusIn=> self.get_focus_in_event(&xevent),
+                            FocusOut=> self.get_focus_out_event(&xevent),
+                            KeymapNotify=> self.get_keymap_notify_event(&xevent),
+                            Expose=> self.get_expose_event(&xevent),
+                            GraphicsExpose=> self.get_graphics_expose_event(&xevent),
+                            NoExpose=> self.get_no_expose_event(&xevent),
+                            VisibilityNotify=> self.get_visibility_notify_event(&xevent),
+                            CreateNotify=> self.get_create_notify_event(&xevent),
+                            DestroyNotify=> self.get_destroy_notify_event(&xevent),
+                            UnmapNotify=> self.get_unmap_notify_event(&xevent),
+                            MapNotify=> self.get_map_notify_event(&xevent),
+                            MapRequest=> self.get_map_request_event(&xevent),
+                            ReparentNotify=> self.get_reparent_notify_event(&xevent),
+                            ConfigureNotify=> self.get_configure_notify_event(&xevent),
+                            ConfigureRequest=> self.get_configure_request_event(&xevent),
+                            GravityNotify=> self.get_gravity_notify_event(&xevent),
+                            CirculateNotify=> self.get_circulate_notify_event(&xevent),
+                            CirculateRequest=> self.get_circulate_request_event(&xevent),
+                            PropertyNotify=> self.get_property_notify_event(&xevent),
+                            SelectionClear=> self.get_selection_clear_event(&xevent),
+                            SelectionRequest=> self.get_selection_request_event(&xevent),
+                            SelectionNotify=> self.get_selection_notify_event(&xevent),
+                            ColormapNotify=> self.get_colormap_notify_event(&xevent),
+                            ClientMessage=> self.get_client_message_event(&xevent),
+                            MappingNotify=> self.get_mapping_notify_event(&xevent),
+                            GenericEvent=> self.get_generic_event(&xevent),
+                            _ => self.get_unknown_event(&xevent),
+                        }
+                    
+                    }
+                }
+            } else {
+                Event::None   // Return None event
+            }
+        }
+    }
+
+    /// Retain an event for next fetch.
+    #[inline(always)]
+    fn retain_event(&mut self, retain: Event) {
+        self.retained_event = Some(retain);
+        self.event_count += 1;
+    }
+    
+
     /// Get Event created from KeyPress
     #[inline(always)]
-    pub fn get_key_press_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_key_press_event(&self, xevent : &XEvent) -> Event {
         unsafe {
-            #[cfg(debug_assertions)]
-            println!("EventKeyboard::KeyDown({})", xevent._xkey._keycode); 
-
             Event::Keyboard(EventKeyboard::KeyDown(xevent._xkey._keycode))
         }
     }
 
-    /// Get Event created from KeyRelease
+    /// Get Event created from KeyRelease.
     #[inline(always)]
-    pub fn get_key_release_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_key_release_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
-            #[cfg(debug_assertions)]
-            println!("EventKeyboard::KeyUp({})", xevent._xkey._keycode); 
 
+            if self.keyboard.auto_repeat {  // No anti-repeat routine
+                Event::Keyboard(EventKeyboard::KeyUp(xevent._xkey._keycode))
+            } else {    // Use anti-repeat routine
+                self.get_anti_repeat_key_release_event(xevent)
+            }
+            
+        }
+    }
+
+    /// Get Event created from KeyRelease with anti-repeat protection.
+    /// Steps :
+    /// 1. Peek next event
+    /// 2. if is KeyDown same key, ignore both events.
+    /// 3. else, return Keyup and retain peeked event.
+    #[inline(always)]
+    pub fn get_anti_repeat_key_release_event(&mut self, xevent : &XEvent) -> Event{
+        unsafe {
+            if self.event_count > 0 {
+                // 1. Peek next event
+                let peeked = self.get_event();
+
+                // 2. Make sure it's keyboard event
+                if let Event::Keyboard(kb_event) = peeked {
+                    // 3. Make sure it's keydown event
+                    if let EventKeyboard::KeyDown(keycode) = kb_event {
+                        // 4. If same keycode, ignore both event and get next
+                        if keycode == xevent._xkey._keycode {   
+                            return self.get_event();
+                        }
+                    }
+                }
+
+                // 5. If not ignored, retain peeked event
+                self.retain_event(peeked);
+            } 
+            
+            // Key is not repeating, return current keyup
             Event::Keyboard(EventKeyboard::KeyUp(xevent._xkey._keycode))
         }
     }
@@ -36,7 +141,7 @@ impl X11Window {
     /// Get Event created from ButtonPress
     /// Mouse button press.
     #[inline(always)]
-    pub fn get_button_press_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_button_press_event(&self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("EventMouse::ButtonDown({})", xevent._xbutton._button); 
@@ -48,7 +153,7 @@ impl X11Window {
     /// Get Event created from ButtonRelease
     /// Mouse button release.
     #[inline(always)]
-    pub fn get_button_release_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_button_release_event(&self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("EventMouse::ButtonUp({})", xevent._xbutton._button); 
@@ -60,7 +165,7 @@ impl X11Window {
     /// Get Event created from MotionNotify.
     /// Happens when pointer is moving over window
     #[inline(always)]
-    pub fn get_motion_notify_event(&mut self, xevent : &XEvent) -> Event {
+    pub(super) fn get_motion_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             match self.pointer.mode {   
                 PointerMode::Pointer => {
@@ -88,7 +193,7 @@ impl X11Window {
     /// Get Event created from EnterNotify.
     /// Pointer entered window
     #[inline(always)]
-    pub fn get_enter_notify_event(&mut self, _xevent : &XEvent) -> Event {
+    pub(super) fn get_enter_notify_event(&mut self, _xevent : &XEvent) -> Event {
         // Hide cursor if supposed to be hidden.
         if !self.pointer.is_visible {
             self.pointer.is_visible = true;
@@ -101,7 +206,7 @@ impl X11Window {
     /// Get Event created from LeaveNotify
     /// Pointer left window
     #[inline(always)]
-    pub fn get_leave_notify_event(&mut self, _xevent : &XEvent) -> Event {
+    pub(super) fn get_leave_notify_event(&mut self, _xevent : &XEvent) -> Event {
          // Show hidden cursor when out of window.
          if !self.pointer.is_visible {
             self.show_pointer();
@@ -114,7 +219,7 @@ impl X11Window {
     /// Get Event created from FocusIn
     /// Window got focus.
     #[inline(always)]
-    pub fn get_focus_in_event(&mut self, _xevent : &XEvent) -> Event {
+    pub(super) fn get_focus_in_event(&mut self, _xevent : &XEvent) -> Event {
         // If cursor is confined, confine cursor on focus.
         if self.pointer.is_confined {
             self.confine_pointer();
@@ -126,7 +231,7 @@ impl X11Window {
     /// Get Event created from FocusOut
     /// Window lost focus
     #[inline(always)]
-    pub fn get_focus_out_event(&mut self, _xevent : &XEvent) -> Event {
+    pub(super) fn get_focus_out_event(&mut self, _xevent : &XEvent) -> Event {
         // If cursor is confined, confine cursor on focus.
         if self.pointer.is_confined {
             self.release_pointer();
@@ -139,18 +244,18 @@ impl X11Window {
     /// Get Event created from KeymapNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_keymap_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_keymap_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), KeymapNotify({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from Expose
     /// Part of window need to be redrawed 
     #[inline(always)]
-    pub fn get_expose_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_expose_event(&self, xevent : &XEvent) -> Event {
         unsafe {
             Event::Window(EventWindow::Exposed((xevent._xexpose._x, xevent._xexpose._y), (xevent._xexpose._width as u32, xevent._xexpose._height as u32)))
         }
@@ -159,29 +264,29 @@ impl X11Window {
     /// Get Event created from GraphicsExpose
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_graphics_expose_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_graphics_expose_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), GraphicsExpose({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from NoExpose
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_no_expose_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_no_expose_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), NoExpose({})", self, xevent._type);
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from VisibilityNotify
     /// Window visibility changed
     #[inline(always)]
-    pub fn get_visibility_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_visibility_notify_event(&self, xevent : &XEvent) -> Event {
         unsafe {
             if xevent._xvisibility._state == VisibilityUnobscured {
                 Event::Window(EventWindow::Shown())
@@ -194,73 +299,73 @@ impl X11Window {
     /// Get Event created from CreateNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_create_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_create_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), CreateNotify({})", self, xevent._type);
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from DestroyNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_destroy_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_destroy_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), DestroyNotify({})", self, xevent._type);
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from UnmapNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_unmap_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_unmap_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), UnmapNotify({})", self, xevent._type);
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from MapNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_map_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_map_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), MapNotify({})", self, xevent._type);
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from MapRequest
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_map_request_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_map_request_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), MapRequest({})", self, xevent._type);
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from ReparentNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_reparent_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_reparent_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), ReparentNotify({})", self, xevent._type);
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from ConfigureNotify
     /// Window position and/or size changed
     #[inline(always)]
-    pub fn get_configure_notify_event(&mut self, _xevent : &XEvent) -> Event {
+    pub(super) fn get_configure_notify_event(&mut self, _xevent : &XEvent) -> Event {
         unsafe {
             let position = (self.x_event._xconfigure._x, self.x_event._xconfigure._y);
             let size = (self.x_event._xconfigure._width as u32, self.x_event._xconfigure._height as u32);
@@ -287,51 +392,51 @@ impl X11Window {
     /// Get Event created from ConfigureRequest
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_configure_request_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_configure_request_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), ConfigureRequest({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from GravityNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_gravity_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_gravity_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), GravityNotify({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from CirculateNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_circulate_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_circulate_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), CirculateNotify({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from CirculateRequest
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_circulate_request_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_circulate_request_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), CirculateRequest({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from PropertyNotify
     /// X11 Window atom property changed
     #[inline(always)]
-    pub fn get_property_notify_event(&mut self, _xevent : &XEvent) -> Event {
+    pub(super) fn get_property_notify_event(&mut self, _xevent : &XEvent) -> Event {
         unsafe {
             // State values returned
             let mut hidden = false;
@@ -405,7 +510,6 @@ impl X11Window {
                     32 => {
                         // Convert properties to Atom
                         let states: &mut [Atom] = core::slice::from_raw_parts_mut(prop_return as *mut Atom, nitems_return as usize);
-                        println!("States={:?}", states);
                         
                         for state in states{
                             match *state as Atom {
@@ -422,9 +526,9 @@ impl X11Window {
                                     maximized = true;
                                 },
                                 0 => {},   // Do nothing with 0 atoms
-                                // Print unknown state name
-                                state => { 
-                                    println!("State={:?}", CStr::from_ptr(XGetAtomName(self.display, state)).to_str().unwrap());
+                                // Ignore unknown state name
+                                _state => { 
+                                    //println!("State={:?}", CStr::from_ptr(XGetAtomName(self.display, state)).to_str().unwrap());
                                 }
                             }
                         }
@@ -474,55 +578,59 @@ impl X11Window {
     /// Get Event created from SelectionClear
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_selection_clear_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_selection_clear_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), SelectionClear({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from SelectionRequest
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_selection_request_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_selection_request_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), SelectionRequest({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from SelectionNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_selection_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_selection_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), SelectionNotify({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from ColormapNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_colormap_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_colormap_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), ColormapNotify({})", self, xevent._type);
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from ClientMessage
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_client_message_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_client_message_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             match xevent._xclient._message_type {
                 WINDOW_CLOSING_MESSAGE_TYPE => Event::Window(EventWindow::Close()),
-                _ => Event::Unknown,
+                _ => {
+                    #[cfg(debug_assertions)]
+                    println!("Unknown ClientMessage({:p}), Type({})", self, xevent._xclient._message_type);
+                    self.get_event()
+                },
             }
         }
     }
@@ -530,114 +638,34 @@ impl X11Window {
     /// Get Event created from MappingNotify
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_mapping_notify_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_mapping_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), MappingNotify({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from GenericEvent
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_generic_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_generic_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), GenericEvent({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
 
     /// Get Event created from unknown
     /// Unknown use for now.
     #[inline(always)]
-    pub fn get_unknown_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_unknown_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             #[cfg(debug_assertions)]
             println!("Display({:p}), _({})", self, xevent._type); 
-            Event::Unknown
+            self.get_event()
         }
     }
-
-
-    /*
-
-                    ButtonPress=> { println!("Display({:p}), ButtonPress({})", self, xevent._type); Event::Unknown },
-                    ButtonRelease=> { println!("Display({:p}), ButtonRelease({})", self, xevent._type); Event::Unknown },
-
-                    // Cursor moved
-                    MotionNotify=> {    
-                        match self.property.cursor.mode {   
-                            PointerMode::Pointer => Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y))),
-                            PointerMode::Acceleration => {
-                                let position = (xevent._xmotion._x - self.property.center.0, 
-                                    xevent._xmotion._y - self.property.center.1);
-                                // Report acceleration only if movement occurred
-                                if position.0 != 0 || position.1 != 0 {
-                                    Event::Mouse(EventMouse::Moved(position))
-                                } else {
-                                    Event::None
-                                }
-                            }
-                        }
-                    },
-
-                    // Cursor entered window
-                    EnterNotify=> Event::Window(EventWindow::CursorEnter()),
-
-                    // Cursor left window
-                    LeaveNotify=> Event::Window(EventWindow::CursorLeave()),
-
-                    // Window got focus
-                    FocusIn=> Event::Window(EventWindow::Focus()),
-
-                    // Window lost focus
-                    FocusOut=> Event::Window(EventWindow::Blur()),
-
-                    KeymapNotify=> { println!("Display({:p}), KeymapNotify({})", self, xevent._type); Event::Unknown },
-
-                    // Part of window need to be redrawed 
-                    Expose=> { 
-                        Event::Window(EventWindow::Exposed((xevent._xexpose._x, xevent._xexpose._y), (xevent._xexpose._width as u32, xevent._xexpose._height as u32)))
-                    },
-                    GraphicsExpose=> { println!("Display({:p}), GraphicsExpose({})", self, xevent._type); Event::Unknown },
-                    NoExpose=> { println!("Display({:p}), NoExpose({})", self, xevent._type); Event::Unknown },
-                    VisibilityNotify=> { 
-                        if xevent._xvisibility._state == VisibilityUnobscured {
-                            Event::Window(EventWindow::Shown())
-                        } else {
-                            Event::Window(EventWindow::Hidden())
-                        }
-                    },
-                    CreateNotify=> { println!("Display({:p}), CreateNotify({})", self, xevent._type); Event::Unknown },
-                    DestroyNotify=> { println!("Display({:p}), DestroyNotify({})", self, xevent._type); Event::Unknown },
-                    UnmapNotify=> { println!("Display({:p}), UnmapNotify({})", self, xevent._type); Event::Unknown },
-                    MapNotify=> { println!("Display({:p}), MapNotify({})", self, xevent._type); Event::Unknown },
-                    MapRequest=> { println!("Display({:p}), MapRequest({})", self, xevent._type); Event::Unknown },
-                    ReparentNotify=> { println!("Display({:p}), ReparentNotify({})", self, xevent._type); Event::Unknown },
-
-                    // Window position and/or size changed
-                    ConfigureNotify=> { self.get_window_configuration_event() },
-
-                    ConfigureRequest=> { println!("Display({:p}), ConfigureRequest({})", self, xevent._type); Event::Unknown },
-                    GravityNotify=> { println!("Display({:p}), GravityNotify({})", self, xevent._type); Event::Unknown },
-
-                    CirculateNotify=> { println!("Display({:p}), CirculateNotify({})", self, xevent._type); Event::Unknown },
-                    CirculateRequest=> { println!("Display({:p}), CirculateRequest({})", self, xevent._type); Event::Unknown },
-                    PropertyNotify=> { self.get_x11_window_states_event() },
-                        
-                    SelectionClear=> { println!("Display({:p}), SelectionClear({})", self, xevent._type); Event::Unknown },
-                    SelectionRequest=> { println!("Display({:p}), SelectionRequest({})", self, xevent._type); Event::Unknown },
-                    SelectionNotify=> { println!("Display({:p}), SelectionNotify({})", self, xevent._type); Event::Unknown },
-                    ColormapNotify=> { println!("Display({:p}), ColormapNotify({})", self, xevent._type); Event::Unknown },
-                    ClientMessage=> { println!("Display({:p}), ClientMessage({})", self, xevent._type); Event::Unknown },
-                    MappingNotify=> { println!("Display({:p}), MappingNotify({})", self, xevent._type); Event::Unknown },
-                    GenericEvent=> { println!("Display({:p}), GenericEvent({})", self, xevent._type); Event::Unknown },
-
-    fn handle_keydown() {
-        Event::Keyboard(EventKeyboard::KeyDown(xevent._xkey._keycode));
-        }
-        */
 
 }

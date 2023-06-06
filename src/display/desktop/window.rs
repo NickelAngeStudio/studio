@@ -6,6 +6,7 @@ use crate::error::StudioError;
 
 use super::{provider::WindowProvider };
 use super::pointer::{ PointerMode, PointerProperty};
+use super::keyboard::KeyboardProperty;
 use super::event::Event;
 
  /// Minimum [Window] width allowed.
@@ -103,8 +104,11 @@ pub trait Window {
     /// Get [Window] properties.
     fn get_window_properties(&self) -> &WindowProperty;
 
-    /// Get [PointerProperty]
+    /// Get [PointerProperty] for window.
     fn get_pointer_properties(&self) -> &PointerProperty;
+
+    /// Get [KeyboardProperty] for window.
+    fn get_keyboard_properties(&self) -> &KeyboardProperty;
 
     /// Set the pointer position
     fn set_pointer_position(&mut self, position : (i32, i32));
@@ -123,6 +127,12 @@ pub trait Window {
 
     /// Release cursor from window, allowing it to exit boundaries.
     fn release_pointer(&mut self);
+
+    /// Enable auto repeat of keyboard keys when pressed down. Disabled by default.
+    fn enable_autorepeat(&mut self);
+
+    /// Disable auto repeat of keyboard keys when pressed down.
+    fn disable_autorepeat(&mut self);
 
     /// Restore the window, undoing any minimized, maximized and/or fullscreen status.
     fn restore(&mut self);
