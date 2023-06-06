@@ -5,7 +5,7 @@ use std::{process::exit, time::{Duration, self}, thread};
 use cfg_boost::target_cfg;
 use studio::display::desktop::{event::{Event, EventKeyboard}, window::Window};
 
-use crate::tools::{CYAN_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE, YELLOW_CONSOLE};
+use crate::tools::{CYAN_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE, YELLOW_CONSOLE, MAGENTA_CONSOLE};
 
 /************
 * CONSTANTS * 
@@ -25,14 +25,8 @@ target_cfg! {
 *********/
 /// Event receiver to send events to.
 pub trait EventReceiver {
-    /// Called before receiving events
-    fn before_receive(&mut self);
-
     /// Receive an event
     fn receive(&mut self, event: Event);
-
-    /// Called after receiving events
-    fn after_receive(&mut self);
 
     /// Returning true will break the main loop.
     fn is_test_finished(&self) -> bool;
@@ -46,12 +40,15 @@ pub trait EventReceiver {
 pub fn main_loop(window: &mut dyn Window, receiver: &mut dyn EventReceiver){
 
     'main: loop {
-        receiver.before_receive();
-        'inner: loop {
+          'inner: loop {
             let event = window.poll_event();
 
             // Send event to receiver.
             receiver.receive(event);
+
+            if receiver.is_test_finished() {
+                break 'main;
+            }
 
             match event {
                 Event::Keyboard(kb_event) => match kb_event {
@@ -72,7 +69,6 @@ pub fn main_loop(window: &mut dyn Window, receiver: &mut dyn EventReceiver){
         if receiver.is_test_finished() {
             break 'main;
         }
-        receiver.after_receive();
         thread::sleep(WAIT_MS);
     }
 
@@ -90,6 +86,7 @@ pub fn print_instructions_header() {
     print!("{}{}{}", YELLOW_CONSOLE, "YELLOW", RESET_CONSOLE);
     print!("{}{}{}", CYAN_CONSOLE, ".\n", RESET_CONSOLE);
     println!("{}{}{}", CYAN_CONSOLE, "3. Press ESC to exit and fail any test.", RESET_CONSOLE);
+    println!("{}{}{}", MAGENTA_CONSOLE, "4. Important informations are in MAGENTA.", RESET_CONSOLE);
 
     println!("{}{}**{}", BLUE_CONSOLE, "\n*************", RESET_CONSOLE);
     println!("{}* {} *{}", BLUE_CONSOLE, "TESTS START", RESET_CONSOLE);

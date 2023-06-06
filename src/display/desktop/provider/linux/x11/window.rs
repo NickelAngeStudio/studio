@@ -83,8 +83,8 @@ pub struct X11Window {
     /// Used to fetch X11 events
     pub(crate) x_event : XEvent,    
 
-    /// Retained event that will be sent next poll_event 
-    pub(crate) retained_event : Option<Event>,
+    /// Retained events that will be sent next poll_event 
+    pub(crate) retained_events : Vec<Event>,
 
     /// C-compatible string for window title
     pub(crate) wm_title : CString,
@@ -141,7 +141,7 @@ impl X11Window {
                 pointer: PointerProperty::new(POINTER_LEFT_BUTTON,POINTER_RIGHT_BUTTON,POINTER_MIDDLE_BUTTON,POINTER_NEXT_BUTTON,
                     POINTER_PREVIOUS_BUTTON, POINTER_SCROLL_UP, POINTER_SCROLL_DOWN, POINTER_SCROLL_LEFT, POINTER_SCROLL_RIGHT),
                 property,
-                retained_event: Option::None,  // No retained event for now.
+                retained_events: Vec::new(),  // No retained event for now.
                 keyboard: KeyboardProperty::new(),  
             }
         }

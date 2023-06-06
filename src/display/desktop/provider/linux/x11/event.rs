@@ -22,52 +22,47 @@ impl X11Window {
             if self.event_count > 0 {
                 self.event_count -= 1;  // Decrease event count
 
-                match self.retained_event {
-                    Some(event) => {
-                        self.retained_event = Option::None;
-                        event   // Return retained event
-                    },
-                    Option::None => {
-                        XNextEvent(self.display, &mut self.x_event);
-                        let xevent = self.x_event; 
-                        
-                        match xevent._type {
-                            KeyPress => self.get_key_press_event(&xevent),
-                            KeyRelease=> self.get_key_release_event(&xevent),
-                            ButtonPress=> self.get_button_press_event(&xevent),
-                            ButtonRelease=> self.get_button_release_event(&xevent),
-                            MotionNotify=> self.get_motion_notify_event(&xevent),  
-                            EnterNotify=> self.get_enter_notify_event(&xevent),
-                            LeaveNotify=> self.get_leave_notify_event(&xevent),
-                            FocusIn=> self.get_focus_in_event(&xevent),
-                            FocusOut=> self.get_focus_out_event(&xevent),
-                            KeymapNotify=> self.get_keymap_notify_event(&xevent),
-                            Expose=> self.get_expose_event(&xevent),
-                            GraphicsExpose=> self.get_graphics_expose_event(&xevent),
-                            NoExpose=> self.get_no_expose_event(&xevent),
-                            VisibilityNotify=> self.get_visibility_notify_event(&xevent),
-                            CreateNotify=> self.get_create_notify_event(&xevent),
-                            DestroyNotify=> self.get_destroy_notify_event(&xevent),
-                            UnmapNotify=> self.get_unmap_notify_event(&xevent),
-                            MapNotify=> self.get_map_notify_event(&xevent),
-                            MapRequest=> self.get_map_request_event(&xevent),
-                            ReparentNotify=> self.get_reparent_notify_event(&xevent),
-                            ConfigureNotify=> self.get_configure_notify_event(&xevent),
-                            ConfigureRequest=> self.get_configure_request_event(&xevent),
-                            GravityNotify=> self.get_gravity_notify_event(&xevent),
-                            CirculateNotify=> self.get_circulate_notify_event(&xevent),
-                            CirculateRequest=> self.get_circulate_request_event(&xevent),
-                            PropertyNotify=> self.get_property_notify_event(&xevent),
-                            SelectionClear=> self.get_selection_clear_event(&xevent),
-                            SelectionRequest=> self.get_selection_request_event(&xevent),
-                            SelectionNotify=> self.get_selection_notify_event(&xevent),
-                            ColormapNotify=> self.get_colormap_notify_event(&xevent),
-                            ClientMessage=> self.get_client_message_event(&xevent),
-                            MappingNotify=> self.get_mapping_notify_event(&xevent),
-                            GenericEvent=> self.get_generic_event(&xevent),
-                            _ => self.get_unknown_event(&xevent),
-                        }
+                if self.retained_events.len() > 0 {
+                    self.retained_events.pop().unwrap() // Pop event from retained
+                } else {
+                    XNextEvent(self.display, &mut self.x_event);
+                    let xevent = self.x_event; 
                     
+                    match xevent._type {
+                        KeyPress => self.get_key_press_event(&xevent),
+                        KeyRelease=> self.get_key_release_event(&xevent),
+                        ButtonPress=> self.get_button_press_event(&xevent),
+                        ButtonRelease=> self.get_button_release_event(&xevent),
+                        MotionNotify=> self.get_motion_notify_event(&xevent),  
+                        EnterNotify=> self.get_enter_notify_event(&xevent),
+                        LeaveNotify=> self.get_leave_notify_event(&xevent),
+                        FocusIn=> self.get_focus_in_event(&xevent),
+                        FocusOut=> self.get_focus_out_event(&xevent),
+                        KeymapNotify=> self.get_keymap_notify_event(&xevent),
+                        Expose=> self.get_expose_event(&xevent),
+                        GraphicsExpose=> self.get_graphics_expose_event(&xevent),
+                        NoExpose=> self.get_no_expose_event(&xevent),
+                        VisibilityNotify=> self.get_visibility_notify_event(&xevent),
+                        CreateNotify=> self.get_create_notify_event(&xevent),
+                        DestroyNotify=> self.get_destroy_notify_event(&xevent),
+                        UnmapNotify=> self.get_unmap_notify_event(&xevent),
+                        MapNotify=> self.get_map_notify_event(&xevent),
+                        MapRequest=> self.get_map_request_event(&xevent),
+                        ReparentNotify=> self.get_reparent_notify_event(&xevent),
+                        ConfigureNotify=> self.get_configure_notify_event(&xevent),
+                        ConfigureRequest=> self.get_configure_request_event(&xevent),
+                        GravityNotify=> self.get_gravity_notify_event(&xevent),
+                        CirculateNotify=> self.get_circulate_notify_event(&xevent),
+                        CirculateRequest=> self.get_circulate_request_event(&xevent),
+                        PropertyNotify=> self.get_property_notify_event(&xevent),
+                        SelectionClear=> self.get_selection_clear_event(&xevent),
+                        SelectionRequest=> self.get_selection_request_event(&xevent),
+                        SelectionNotify=> self.get_selection_notify_event(&xevent),
+                        ColormapNotify=> self.get_colormap_notify_event(&xevent),
+                        ClientMessage=> self.get_client_message_event(&xevent),
+                        MappingNotify=> self.get_mapping_notify_event(&xevent),
+                        GenericEvent=> self.get_generic_event(&xevent),
+                        _ => self.get_unknown_event(&xevent),
                     }
                 }
             } else {
@@ -79,7 +74,7 @@ impl X11Window {
     /// Retain an event for next fetch.
     #[inline(always)]
     fn retain_event(&mut self, retain: Event) {
-        self.retained_event = Some(retain);
+        self.retained_events.push(retain);
         self.event_count += 1;
     }
     

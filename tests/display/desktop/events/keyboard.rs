@@ -1,5 +1,3 @@
-use std::{process::exit, time::Instant};
-
 use cfg_boost::target_cfg;
 use studio::display::desktop::{window::Window, event::{EventKeyboard, Event}};
 
@@ -18,96 +16,299 @@ pub fn test_keyboard(window: &mut dyn Window){
     println!("{}{}{}", BLUE_CONSOLE, "Starting keyboard event tests ...", RESET_CONSOLE);
     
     // Hold spacebar test
-    main_loop(window, &mut HoldSpace::new());
+    //main_loop(window, &mut hold_space::HoldSpace::new());
+
+    // Different keys test
+    //main_loop(window, &mut different_keys::DifferentKeys::new());
+
+    // Hold different keys
+    main_loop(window, &mut hold_different_keys::HoldDifferentKeys::new());
+    
 
     println!("{}{}{}", BLUE_CONSOLE, "... keyboard event tests ended ...", RESET_CONSOLE);
 }
 
-/// Struct that test holding space bar as an Event Receiver.
-struct HoldSpace {
-    is_done: bool,          // Is the test finished.
-    duration : Instant,     // Duration of press
-    space_pressed : bool,   // True if bar is pressed, false otherwise
-    step_done:bool,         // Is holding space step done.
-    step_msg:bool,          // If 2nd step message has showed.
-}
+/// This module contains the test which user must hold space bar for 5 seconds.
+/// 
+/// This test is used to see if an anti-repeat routine has been implemented.
+mod hold_space {
+    use std::time::Instant;
 
-impl HoldSpace {
-    pub fn new() -> HoldSpace {
-        println!("{}Hold SPACE on keyboard until told to release...{}", YELLOW_CONSOLE, RESET_CONSOLE);
-        HoldSpace { is_done: false, duration: Instant::now(), space_pressed: false, step_done: false, step_msg: false }
+    use studio::display::desktop::event::{Event, EventKeyboard};
+
+    use crate::{display::desktop::rsrcs::EventReceiver, tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}};
+
+    use super::SPACE_KEY_VALUE;
+
+    const HOLD_TIME_SEC:u64 = 5;  // Count of seconds to hold bar
+
+    /// Struct that test holding space bar as an Event Receiver.
+    pub struct HoldSpace {
+        is_done: bool,          // Is the test finished.
+        duration : Instant,     // Duration of press
+        space_pressed : bool,   // True if bar is pressed, false otherwise
+        step_done:bool,         // Is holding space step done.
+        step_msg:bool,          // If 2nd step message has showed.
     }
 
-    /// Step where user hold space
-    #[inline(always)]
-    pub(super) fn hold_space_step(&mut self, kb_event : EventKeyboard){
-        
-        match kb_event {
-            EventKeyboard::KeyDown(keycode) => {
-                if keycode == SPACE_KEY_VALUE {
-                    println!("{}{}{}", BLUE_CONSOLE, "Space is now down ...", RESET_CONSOLE);
-                    self.space_pressed = true;
-                    self.duration = Instant::now();
-                }
-            },
-            EventKeyboard::KeyUp(keycode) => {
-                if keycode == SPACE_KEY_VALUE {
-                    println!("{}{}{}", BLUE_CONSOLE, "Space is released too soon, try again ...", RESET_CONSOLE);
-                    self.space_pressed = false;
-                }
-            },
+    impl HoldSpace {
+        pub fn new() -> HoldSpace {
+            println!("{}Hold SPACE on keyboard until told to release...{}", YELLOW_CONSOLE, RESET_CONSOLE);
+            HoldSpace { is_done: false, duration: Instant::now(), space_pressed: false, step_done: false, step_msg: false }
         }
 
-        if self.space_pressed {
-            if self.duration.elapsed().as_secs() >= 2 { // Space was hold for 2 seconds.
-                self.step_done = true;
+        /// Step where user hold space
+        #[inline(always)]
+        pub(super) fn hold_space_step(&mut self, event: Event){
+            
+            // Only validate keyboard events
+            if let Event::Keyboard(kb_event) = event {
+                match kb_event {
+                    EventKeyboard::KeyDown(keycode) => {
+                        if keycode == SPACE_KEY_VALUE {
+                            println!("{}{}{}", BLUE_CONSOLE, "Space is now down ...", RESET_CONSOLE);
+                            self.space_pressed = true;
+                            self.duration = Instant::now();
+                        }
+                    },
+                    EventKeyboard::KeyUp(keycode) => {
+                        if keycode == SPACE_KEY_VALUE {
+                            println!("{}{}{}", BLUE_CONSOLE, "Space is released too soon, try again ...", RESET_CONSOLE);
+                            self.space_pressed = false;
+                        }
+                    },
+                }
+            }
+
+            if self.space_pressed {
+                if self.duration.elapsed().as_secs() >= HOLD_TIME_SEC { // Space was hold for 5 seconds.
+                    self.step_done = true;
+                }
             }
         }
-    }
 
-    /// Step where user release space.
-    #[inline(always)]
-    pub(super) fn release_space_step(&mut self, kb_event : EventKeyboard) {
-        if !self.step_msg { // Show next step message.
-            println!("{}Release SPACE...{}", YELLOW_CONSOLE, RESET_CONSOLE);
-            self.step_msg = true; 
-        }
-
-        // Verify if space key was released.
-        if let EventKeyboard::KeyUp(keycode) = kb_event {
-            if keycode == SPACE_KEY_VALUE {
-                self.is_done = true;
+        /// Step where user release space.
+        #[inline(always)]
+        pub(super) fn release_space_step(&mut self, event: Event) {
+            if !self.step_msg { // Show next step message.
+                println!("{}Release SPACE...{}", YELLOW_CONSOLE, RESET_CONSOLE);
+                self.step_msg = true; 
             }
+
+            if let Event::Keyboard(kb_event) = event {
+                // Verify if space key was released.
+                if let EventKeyboard::KeyUp(keycode) = kb_event {
+                    if keycode == SPACE_KEY_VALUE {
+                        self.is_done = true;
+                    }
+                }
+            }
+            
+
         }
-        
-
     }
-}
 
-impl EventReceiver for HoldSpace {
+    impl EventReceiver for HoldSpace {
+
     fn receive(&mut self, event: Event) {
 
-        // Only validate keyboard events
-        if let Event::Keyboard(kb_event) = event {
-            if !self.step_done {
-                self.hold_space_step(kb_event);
-            } else {
-                self.release_space_step(kb_event);
-            }
+        if !self.step_done {
+            self.hold_space_step(event);
+        } else {
+            self.release_space_step(event);
         }
+        
     }
 
     fn is_test_finished(&self) -> bool {
         self.is_done
     }
 
-    fn before_receive(&mut self) {
-        if !self.step_done {
-            self.hold_space_step(EventKeyboard::KeyDown(0));
-        } else {
-            self.release_space_step(EventKeyboard::KeyDown(0));
+}
+}
+
+/// This module contains a test which user must press 50 differents keys.
+/// 
+/// This test is used to see if the keyboard implementation isn't using generic
+/// values.
+mod different_keys{
+    use std::collections::HashMap;
+
+    use studio::display::desktop::event::{Event, EventKeyboard};
+
+    use crate::{tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}, display::desktop::rsrcs::EventReceiver};
+
+    // Count of keys to press.
+    const KEY_COUNT:usize = 50;
+
+    /// Struct that test pressing multiples differents keys
+    pub struct DifferentKeys {
+        is_done: bool,          // Is the test finished.
+        keymap : HashMap<u32, usize>,
+        almost_done_msg:bool,   // Indicate if almost done is printed
+    }
+
+    impl DifferentKeys {
+        pub fn new() -> DifferentKeys {
+            println!("{}Press and release {} differents keys...{}", YELLOW_CONSOLE, KEY_COUNT, RESET_CONSOLE);
+            DifferentKeys { is_done: false, keymap: HashMap::new(), almost_done_msg: true }
         }
     }
 
-    fn after_receive(&mut self) {}
+    impl EventReceiver for DifferentKeys {
+
+        fn receive(&mut self, event: Event) {
+
+            if self.keymap.len() % 10 == 0 && !self.almost_done_msg {   // Tell progression each 10 keys
+                println!("{}Thats {} keys, only {} mores!{}", YELLOW_CONSOLE, self.keymap.len(), KEY_COUNT - self.keymap.len(), RESET_CONSOLE);
+                self.almost_done_msg = true;
+            }
+
+            if let Event::Keyboard(kb_event) = event {
+                match kb_event {
+                    EventKeyboard::KeyDown(keycode) => {
+                        if !self.keymap.contains_key(&keycode) {
+                            self.almost_done_msg = false;
+                            self.keymap.insert(keycode, 1);
+                        } else {
+                            println!("{}{}{}", BLUE_CONSOLE, "You already pressed that key!", RESET_CONSOLE);
+                        }
+                       
+                    },
+                    EventKeyboard::KeyUp(_) => {},
+                }
+            }
+
+            if self.keymap.len() >= KEY_COUNT && !self.is_done {
+                println!("{}Thats {} keys, you did it!{}", YELLOW_CONSOLE, self.keymap.len(), RESET_CONSOLE);
+                self.is_done = true;
+            }
+            
+        }
+
+        fn is_test_finished(&self) -> bool {
+            self.is_done
+        }
+
+    }
+}
+
+
+/// This module contain a test which user must hold 3 different keys for 5 seconds.
+/// 
+/// This test is used to see if the anti-repeat routine works with more than 1 key.
+mod hold_different_keys{
+    use std::{collections::HashMap, time::Instant};
+
+    use studio::display::desktop::event::{Event, EventKeyboard};
+
+    use crate::{tools::{YELLOW_CONSOLE, RESET_CONSOLE, MAGENTA_CONSOLE}, display::desktop::rsrcs::EventReceiver};
+
+    // Count of keys to hold.
+    const KEY_COUNT:usize = 3;
+
+    // Count of seconds to hold keys
+    const HOLD_TIME_SEC:u64 = 5;  
+
+    /// Struct that test holding space bar as an Event Receiver.
+    pub struct HoldDifferentKeys {
+        is_done: bool,          // Is the test finished.
+        keymap : HashMap<u32, usize>,
+        duration : Instant,     // Duration of press
+        key_valid:bool,         // True if keys are valid
+        print_msg:bool,     // Verify if we print a message
+    }
+
+    impl HoldDifferentKeys {
+        pub fn new() -> HoldDifferentKeys {
+            println!("{}{}{}", MAGENTA_CONSOLE, "IMPORTANT : Some keyboard cannot physicaly handle 3 key pressed on the same circuit. Try to spread the keys you hold!", RESET_CONSOLE);
+            HoldDifferentKeys { is_done: false, keymap: HashMap::new(), duration: Instant::now(), print_msg: true, key_valid: false }
+        }
+    }
+
+    impl EventReceiver for HoldDifferentKeys {
+
+        fn receive(&mut self, event: Event) {
+
+            let keypress = self.keymap.iter().filter(|x| x.1 == &1).count();
+
+            match keypress {
+                0 => {
+                    if self.print_msg {
+                        println!("{}Press and hold {} differents keys...{}", YELLOW_CONSOLE, KEY_COUNT, RESET_CONSOLE);
+                        self.print_msg = false;
+                    }
+                    
+                    self.key_valid = false;
+                },
+                1 => {
+                    if self.print_msg {
+                        println!("{}Press and hold {} differents keys...{}", YELLOW_CONSOLE, KEY_COUNT - 1, RESET_CONSOLE);
+                        self.print_msg = false;
+                    }
+                    self.key_valid = false;
+                },
+                2 => {
+                    if self.print_msg {
+                        println!("{}Press and hold {} differents keys...{}", YELLOW_CONSOLE, KEY_COUNT - 2, RESET_CONSOLE);
+                        self.print_msg = false;
+                    }
+                    self.key_valid = false;
+                },
+                3 => {
+                    if self.print_msg {
+                        println!("{}Press and hold those differents keys...{}", YELLOW_CONSOLE, RESET_CONSOLE);
+                        self.print_msg = false;
+                    }
+
+                    if !self.key_valid  {
+                        self.key_valid = true;
+                        self.duration = Instant::now();
+
+                        
+                    } else {
+                        if self.duration.elapsed().as_secs() >= HOLD_TIME_SEC { // Space was hold for 5 seconds.
+                            self.is_done = true;
+                        }
+                    }
+                },  
+                _ => {
+                    if self.print_msg {
+                        println!("{}Holding too many keys! Only {} differents keys needed...{}", YELLOW_CONSOLE, KEY_COUNT, RESET_CONSOLE);
+                        self.print_msg = false;
+                    }
+                    self.key_valid = false;
+                }
+            }
+            
+
+            if let Event::Keyboard(kb_event) = event {
+                self.print_msg = true;
+                match kb_event {
+                    EventKeyboard::KeyDown(keycode) => {
+                        self.keymap.insert(keycode, 1);
+                       
+                    },
+                    EventKeyboard::KeyUp(keycode) => {
+                        self.keymap.insert(keycode, 0);
+                    },
+                }
+                print!("KEYMAP :");
+                        for v in self.keymap.iter() {
+                            print!("{:?}", v);
+                        }
+                        print!("\n");
+            }
+            
+        }
+
+        fn is_test_finished(&self) -> bool {
+            if self.is_done {
+                println!("{}Perfect, hold different key test is finished!{}", YELLOW_CONSOLE, RESET_CONSOLE);
+            }
+
+            self.is_done
+        }
+
+    }
 }
