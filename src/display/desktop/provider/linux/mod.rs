@@ -1,6 +1,8 @@
 //! Linux implementations of [Window].
 
-use crate::{display::{ error::DisplayError, desktop::window::Window}, error::StudioError};
+use crate::{display::{ error::DisplayError, desktop::{window::Window, property::WindowProperty, manager::{WindowManager, WindowManagerShowParameters}, event::Event}}, error::StudioError};
+use self::x11::manager::X11WindowManager;
+
 use super::super::screen::ScreenList;
 
 use super::WindowProvider;
@@ -12,7 +14,182 @@ use super::WindowProvider;
 /// X11 DisplayManager
 pub mod x11;
 
+/// Default linux provider. Will be filled if None.
+static DefaultLinuxWindowProvider: Option<WindowProvider> = None;
 
+/// Redirect call to the correct window manager
+macro_rules! linux_wm {
+    ($self:ident) => {
+        match DefaultLinuxWindowProvider {
+            WindowProvider::Wayland => todo!(),
+            WindowProvider::X11 => $self.x11manager.unwrap(),
+            _ => { panic!("Provider not compatible!") }
+        }
+    };
+}
+
+
+/// Linux [WindowManager] managing Wayland and X11 calls.
+pub(crate) struct LinuxWindowManager {
+    x11manager : Option<X11WindowManager>,
+}
+
+impl LinuxWindowManager {
+   
+    pub fn from_provider(provider: WindowProvider) -> Result<LinuxWindowManager, StudioError> {
+        match provider {
+            WindowProvider::Wayland => todo!(),
+            WindowProvider::X11 => X11WindowManager::new(),
+            _ => { panic!("Provider not compatible!") }
+        }
+
+    }
+}
+
+impl WindowManager for LinuxWindowManager {
+    /// Create a new LinuxWindowManager according to DefaultLinuxWindowProvider.
+    /// If DefaultLinuxWindowProvider is None, will try to see if Wayland is compatible
+    /// then fallback to X11. 
+    fn new() -> Result<Self, StudioError> {
+        match DefaultLinuxWindowProvider {
+            Some(provider) => LinuxWindowManager::from_provider(provider),
+            None => {
+                // TODO:Test if wayland compatible then fallback to X11 if not
+                DefaultLinuxWindowProvider = Some(WindowProvider::X11);
+                LinuxWindowManager::new()
+            },
+        }
+    }
+
+    #[inline(always)]
+    fn poll_event(&mut self) -> Event  {
+        linux_wm!(self).poll_event()
+    }
+
+    #[inline(always)]
+    fn show(&mut self, parameters : WindowManagerShowParameters) {
+        linux_wm!(self).show(parameters);
+    }
+
+    #[inline(always)]
+    fn restore(&mut self)  {
+        linux_wm!(self).restore();
+    }
+
+    #[inline(always)]
+    fn close(&mut self) {
+        linux_wm!(self).close();
+    }
+
+    #[inline(always)]
+    fn hide(&mut self) {
+        linux_wm!(self).hide();
+    }
+
+    #[inline(always)]
+    fn get_screen_list(&self) -> &ScreenList {
+        linux_wm!(self).get_screen_list()
+    }
+
+    #[inline(always)]
+    fn set_title(&mut self, title:&str) {
+        linux_wm!(self).set_title(title);
+    }
+
+    #[inline(always)]
+    fn set_size(&mut self, size : (u32, u32)) {
+        linux_wm!(self).set_size(size);
+    }
+
+    #[inline(always)]
+    fn set_position(&mut self, position : (i32,i32)) {
+        linux_wm!(self).set_position(position);
+    }
+
+    #[inline(always)]
+    fn set_pointer_position(&mut self, position : (i32,i32)) {
+        linux_wm!(self).set_pointer_position(position);
+    }
+
+    #[inline(always)]
+    fn hide_pointer(&mut self) {
+        linux_wm!(self).hide_pointer();
+    }
+
+    #[inline(always)]
+    fn show_pointer(&mut self) {
+        linux_wm!(self).show_pointer();
+    }
+
+    #[inline(always)]
+    fn confine_pointer(&mut self) {
+        linux_wm!(self).confine_pointer();
+    }
+
+    #[inline(always)]
+    fn release_pointer(&mut self) {
+        linux_wm!(self).release_pointer();
+    }
+
+    #[inline(always)]
+    fn enable_autorepeat(&mut self) {
+        linux_wm!(self).enable_autorepeat();
+    }
+
+    #[inline(always)]
+    fn disable_autorepeat(&mut self) {
+        linux_wm!(self).disable_autorepeat();
+    }
+
+    #[inline(always)]
+    fn get_left_button_index(&self) -> u32 {
+        linux_wm!(self).get_left_button_index()
+    }
+
+    #[inline(always)]
+    fn get_right_button_index(&self) -> u32 {
+        linux_wm!(self).get_right_button_index()
+    }
+
+    #[inline(always)]
+    fn get_middle_button_index(&self) -> u32 {
+        linux_wm!(self)..self.get_middle_button_index()
+    }
+
+    #[inline(always)]
+    fn get_next_button_index(&self) -> u32 {
+        linux_wm!(self).get_next_button_index()
+    }
+
+    #[inline(always)]
+    fn get_previous_button_index(&self) -> u32 {
+        linux_wm!(self).get_previous_button_index()
+    }
+
+    #[inline(always)]
+    fn get_scroll_up_index(&self) -> u32 {
+        linux_wm!(self).get_scroll_up_index()
+    }
+
+    #[inline(always)]
+    fn get_scroll_down_index(&self) -> u32 {
+        linux_wm!(self).get_scroll_down_index()
+    }
+
+    #[inline(always)]
+    fn get_scroll_left_index(&self) -> u32 {
+        linux_wm!(self).get_scroll_left_index()
+    }
+
+    #[inline(always)]
+    fn get_scroll_right_index(&self) -> u32 {
+        linux_wm!(self).get_scroll_right_index()
+    }
+   
+}
+
+
+/*
 /// Get linux Display. Will try wayland as provider first then X11.
 /// 
 /// # Error(s)
@@ -22,7 +199,7 @@ pub(crate) fn get_linux_window(width:u32, height:u32) -> Result<impl Window, Stu
     // TODO: Replace with Wayland first
     get_x11_window(width, height)
 
-    /*
+    
      // Try Wayland first
      match Window::from_provider(WindowProvider::Wayland, width, height) {
         Ok(window) => {
@@ -41,8 +218,9 @@ pub(crate) fn get_linux_window(width:u32, height:u32) -> Result<impl Window, Stu
             }
         },
     }
-    */
+    
 }
+
 
 pub fn get_x11_window(width:u32, height:u32) -> Result<impl Window, StudioError> {
     if x11::X11Window::is_supported() {
@@ -77,7 +255,7 @@ pub(crate) fn get_linux_screen_list() -> Result<ScreenList, StudioError> {
    }
 }
 
-/*
+
 /// Macro shortcut to execute either wayland or x11 function.
 #[doc(hidden)]
 #[macro_export]

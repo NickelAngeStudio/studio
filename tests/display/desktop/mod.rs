@@ -27,6 +27,9 @@ target_cfg! {
             events::window_events_tests(&mut window);
 
             rsrcs::print_instructions_footer();
+
+            
+
         }
     }
 }

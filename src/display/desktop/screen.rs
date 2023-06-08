@@ -1,12 +1,5 @@
 //! Hardware display information.
 
-use cfg_boost::{meta_cfg, match_cfg};
-
-use crate::{error::StudioError, display::error::DisplayError};
-
-use super::provider::WindowProvider;
-
-
 
 /// Contains list of all hardware display device.
 pub struct ScreenList {
@@ -21,49 +14,9 @@ pub struct ScreenList {
 }
 
 impl ScreenList {
-
-    /// Create a new screen list that contains the details of all screens.
-    /// 
-    /// Returns Ok(KScreenList) on success.
-    /// 
-    /// # Error(s)
-    /// Returns Err([StudioError::Display(DisplayError::ScreenDetailError)]) if an error occurred while creating screen list.
-    #[meta_cfg(desktop)]
-    pub fn new() -> Result<ScreenList, StudioError> {
-
-        match_cfg! {
-            linux => super::provider::linux::get_linux_screen_list(),
-            _ => todo!()
-        }
-        
-    }
-
     /// Create a screen list from combined resolution and vector of screen.
     pub(crate) fn create(size : (u32,u32), screen_list : Vec<Screen>) -> ScreenList{
         ScreenList{ width: size.0, height: size.1, screen_list }
-    }
-
-    /// Create a new screen list from provider.
-    /// 
-    /// Returns Ok(KScreenList) on success.
-    /// 
-    /// # Error(s)
-    /// Returns Err([StudioError::Display(DisplayError::ScreenDetailError)]) if an error occurred while creating screen list.
-    pub fn from_provider(provider : WindowProvider) -> Result<ScreenList, StudioError> {
-        #![cfg_attr(docsrs, doc(cfg(any(target_os = "linux"))))]
-
-        match_cfg! {
-            linux => {
-                match provider{
-                    WindowProvider::Wayland => todo!(),
-                    WindowProvider::X11 =>  super::provider::linux::x11::screen::get_x11_screen_list(),
-                    _ => Err(StudioError::Display(DisplayError::NotSupported)),
-                }
-            }, 
-            _ => Err(StudioError::Display(DisplayError::NotSupported)),
-
-        }
-
     }
 
     /// Returns desktop multi-screen combined width.

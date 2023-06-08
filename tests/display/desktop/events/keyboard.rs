@@ -1,7 +1,7 @@
 use cfg_boost::target_cfg;
-use studio::display::desktop::{window::Window, event::{EventKeyboard, Event}};
+use studio::display::desktop::{window::Window};
 
-use crate::{display::desktop::{ rsrcs::{EventReceiver, main_loop}}, tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}};
+use crate::{display::desktop::{ rsrcs::{main_loop}}, tools::{RESET_CONSOLE, BLUE_CONSOLE}};
 
 
 target_cfg! {
@@ -16,16 +16,23 @@ pub fn test_keyboard(window: &mut dyn Window){
     println!("{}{}{}", BLUE_CONSOLE, "Starting keyboard event tests ...", RESET_CONSOLE);
     
     // Hold spacebar test
-    //main_loop(window, &mut hold_space::HoldSpace::new());
+    main_loop(window, &mut hold_space::HoldSpace::new());
 
     // Different keys test
-    //main_loop(window, &mut different_keys::DifferentKeys::new());
+    main_loop(window, &mut different_keys::DifferentKeys::new());
 
     // Hold different keys
     main_loop(window, &mut hold_different_keys::HoldDifferentKeys::new());
+
+    // Auto-repeat
+    window.enable_autorepeat();
+    main_loop(window, &mut auto_repeat_space::AutoRepeatSpace::new());
+    window.disable_autorepeat();
     
 
     println!("{}{}{}", BLUE_CONSOLE, "... keyboard event tests ended ...", RESET_CONSOLE);
+
+
 }
 
 /// This module contains the test which user must hold space bar for 5 seconds.
@@ -293,11 +300,6 @@ mod hold_different_keys{
                         self.keymap.insert(keycode, 0);
                     },
                 }
-                print!("KEYMAP :");
-                        for v in self.keymap.iter() {
-                            print!("{:?}", v);
-                        }
-                        print!("\n");
             }
             
         }
@@ -311,4 +313,57 @@ mod hold_different_keys{
         }
 
     }
+}
+
+
+/// This module contains the auto-repeat test which disable anti-repeat routine.
+/// 
+/// This test is used to see auto-repeat can be enabled.
+mod auto_repeat_space {
+    use studio::display::desktop::event::{Event, EventKeyboard};
+
+    use crate::{display::desktop::rsrcs::EventReceiver, tools::{YELLOW_CONSOLE, RESET_CONSOLE}};
+
+    use super::SPACE_KEY_VALUE;
+
+    const SPACE_BAR_COUNT:usize = 300;  // Count of spacebar press needed to finish (about 5 secs)
+
+    /// Struct that test holding space bar as an Event Receiver.
+    pub struct AutoRepeatSpace {
+        is_done: bool,          // Is the test finished.
+        press_count:usize,      // Count of spacebar press
+    }
+
+    impl AutoRepeatSpace {
+        pub fn new() -> AutoRepeatSpace {
+            println!("{}Hold SPACE on keyboard for auto-repeat test...{}", YELLOW_CONSOLE, RESET_CONSOLE);
+            AutoRepeatSpace { is_done: false, press_count: 0 }
+        }
+    }
+
+    impl EventReceiver for AutoRepeatSpace {
+
+    fn receive(&mut self, event: Event) {
+
+        if let Event::Keyboard(kb_event) = event {
+            // Verify if space key was released.
+            if let EventKeyboard::KeyUp(keycode) = kb_event {
+                if keycode == SPACE_KEY_VALUE {
+                    self.press_count+=1;    // Increment press count
+                }
+            }
+        }
+
+        if self.press_count>=SPACE_BAR_COUNT {
+            self.is_done = true;
+        }
+        
+        
+    }
+
+    fn is_test_finished(&self) -> bool {
+        self.is_done
+    }
+
+}
 }

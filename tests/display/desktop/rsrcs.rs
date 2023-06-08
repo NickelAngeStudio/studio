@@ -100,4 +100,7 @@ pub fn print_instructions_footer() {
     println!("{}{}**{}", BLUE_CONSOLE, "\n***********", RESET_CONSOLE);
     println!("{}* {} *{}", BLUE_CONSOLE, "TESTS END", RESET_CONSOLE);
     println!("{}**{}**{}", BLUE_CONSOLE, "*********", RESET_CONSOLE);
+
+    println!("{}{}{}", MAGENTA_CONSOLE, "Tests finished, focus console and press ENTER to close.", RESET_CONSOLE);
+    std::io::stdin().read_line(&mut String::new()).unwrap();
 }

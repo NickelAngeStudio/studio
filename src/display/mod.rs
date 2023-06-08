@@ -6,20 +6,19 @@ use crate::error::StudioError;
 pub mod error;
 
 
-
 target_cfg! {
     desktop => {       
-        // Desktop components abstraction of display.
+        // Desktop display components.
         pub mod desktop;
-
-        #[doc(inline)]
-        pub use desktop::create_window;
-
-        
     },
 
     mobile => {
-        /// Mobile components of display.
+        /// Mobile display components.
         pub mod mobile;
+    },
+
+    wasm => {
+        /// Web assembly display components
+        pub mod wasm;
     }
 }

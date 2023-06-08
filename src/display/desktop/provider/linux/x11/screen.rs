@@ -1,5 +1,3 @@
-//use crate::{kleio::display::screen::{Screen, ScreenResolution, ScreenList}, error::{StudioError, DisplayError}};
-
 use crate::{error::StudioError, display::error::DisplayError, display::desktop::screen::{ScreenResolution, ScreenList, Screen}};
 
 /// Get screen list in ScreenList

@@ -1,17 +1,17 @@
 //! Contains inline event functions.
 
-use std::{ffi::{c_int, c_ulong, c_char, CStr}, ptr::null_mut};
+use std::{ffi::{c_int, c_ulong, c_char}, ptr::null_mut};
 
-use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}, pointer::PointerMode, provider::linux::x11::cbind::functs::XGetAtomName, window::Window};
+use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}};
 
-use super::{X11Window, cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent}}};
+use super::{ cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent}}, manager::X11WindowManager};
 use super::cbind::{constants::* };
 
 
 /// Constant value of the window closing message.
 pub const WINDOW_CLOSING_MESSAGE_TYPE:u64 = 327;
 
-impl X11Window {
+impl X11WindowManager {
 
     /// Get a formatted event according to xevent type
     #[inline(always)]
@@ -162,26 +162,7 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_motion_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
-            match self.pointer.mode {   
-                PointerMode::Pointer => {
-                    self.pointer.position = (xevent._xmotion._x, xevent._xmotion._y);
-                    Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y)))
-                },
-                PointerMode::Acceleration => {
-                    let position = (xevent._xmotion._x - self.property.center.0, 
-                        xevent._xmotion._y - self.property.center.1);
-                    // Report acceleration only if movement occurred
-                    if position.0 != 0 || position.1 != 0 {
-                        // Re-center pointer
-                        self.set_pointer_position(self.property.center);
-
-                        // Return position
-                        Event::Mouse(EventMouse::Moved(position))
-                    } else {
-                        self.poll_event()
-                    }
-                }
-            }
+            Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y)))
         }
     }
 
