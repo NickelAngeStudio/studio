@@ -2,12 +2,14 @@
 //! 
 //! Contains components needed to create and manage a desktop windows.
 
+// Enumeration of desktop error
+pub mod error;
 
 // Hardware screen list
 pub mod screen;
 
 // Window manager definition.
-pub mod manager;
+//pub mod manager;
 
 // Window definition.
 pub mod window;

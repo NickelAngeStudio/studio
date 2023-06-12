@@ -1,5 +1,9 @@
 //! Hardware display information.
 
+use cfg_boost::match_cfg;
+
+use crate::error::StudioError;
+
 
 /// Contains list of all hardware display device.
 pub struct ScreenList {
@@ -14,6 +18,25 @@ pub struct ScreenList {
 }
 
 impl ScreenList {
+
+    /// Create a new hardware screen list.
+    pub fn new() -> Result<ScreenList, StudioError> {
+
+        match_cfg! {
+            linux => {
+                // TODO: Try with Wayland first then X11
+                let screens = crate::display::desktop::provider::linux::x11::screen::get_x11_screen_list();
+
+                match screens{
+                    Ok(screens) => Ok(screens),
+                    Err(err) => Err(err),
+                }
+            },
+            _ => Err(StudioError::Display(crate::display::DisplayError::NotSupported)),
+        }
+
+    }
+
     /// Create a screen list from combined resolution and vector of screen.
     pub(crate) fn create(size : (u32,u32), screen_list : Vec<Screen>) -> ScreenList{
         ScreenList{ width: size.0, height: size.1, screen_list }

@@ -1,15 +1,12 @@
 use cfg_boost::{target_cfg};
 
-use crate::error::StudioError;
-
-/// Enumeration of possible display errors.
-pub mod error;
-
-
 target_cfg! {
     desktop => {       
         // Desktop display components.
         pub mod desktop;
+
+        // Reimport desktop error as DisplayError.
+        pub use desktop::error::DesktopError as DisplayError;
     },
 
     mobile => {

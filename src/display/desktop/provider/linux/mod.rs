@@ -1,7 +1,9 @@
 //! Linux implementations of [Window].
 
-use crate::{display::{ error::DisplayError, desktop::{window::Window, property::WindowProperty, manager::{WindowManager, WindowManagerShowParameters}, event::Event}}, error::StudioError};
-use self::x11::manager::X11WindowManager;
+use std::{rc::Rc, cell::RefCell};
+
+use crate::{display::{ desktop::{window::{Window, WindowType}, event::Event, property::{WindowProperty, WindowPropertySet}}, DisplayError}, error::StudioError};
+use self::x11::{ X11Window};
 
 use super::super::screen::ScreenList;
 
@@ -15,15 +17,126 @@ use super::WindowProvider;
 pub mod x11;
 
 /// Default linux provider. Will be filled if None.
-static DefaultLinuxWindowProvider: Option<WindowProvider> = None;
+static mut DefaultLinuxWindowProvider: Option<WindowProvider> = None;
 
+/// Macro that redirect calls to correct window manager. 
+macro_rules! window_manager {
+    ($self : ident) => {
+        if $self.use_wayland {
+            $self.wayland.unwrap()
+        } else {
+            $self.x11.unwrap()
+        }
+    };
+}
+
+/// Linux implementation of a window.
+pub(crate) struct LinuxWindow {
+
+    use_wayland : bool,
+    
+    wayland : Option<X11Window>,
+    x11 : Option<X11Window>,
+
+}
+
+impl LinuxWindow {
+    pub(crate) fn get_properties_mut(&mut self) -> &mut WindowProperty{
+        window_manager!(self).get_properties_mut()
+    }
+
+    pub(crate) fn get_window_rcref(&self) -> Rc<RefCell<WindowType>> {
+        window_manager!(self).get_window_rcref()
+    }
+}
+
+impl Window for LinuxWindow {
+
+    fn new() -> Result<Self, StudioError> {
+        
+        match unsafe { DefaultLinuxWindowProvider } {
+            Some(provider) => {
+                match provider{
+                    WindowProvider::Wayland => todo!(),
+                    WindowProvider::X11 => todo!(),
+                    _ => Err(StudioError::Display(DisplayError::NotSupported)),
+                }
+            },
+            None => {
+                // TODO: Verify is Wayland is supported, if not, fall back to X11.
+                unsafe { DefaultLinuxWindowProvider = Some(WindowProvider::X11) };
+                
+                match X11Window::new(){
+                    Ok(mut x11win) => {
+                        let mut window = LinuxWindow{ use_wayland: false, wayland: None, x11: Some(x11win) };
+                        x11win.rc_ref = Some(Rc::new(RefCell::new(window)));    // Create self contain reference to self.
+                        Ok(window)
+                    },
+                    Err(err) => Err(err),
+                }
+            },
+        }
+    }
+
+    fn show(&mut self) -> Result<bool, StudioError> {
+        window_manager!(self).show()
+    }
+
+    fn hide(&mut self) {
+        window_manager!(self).hide();
+    }
+
+    fn close(&mut self) {
+        window_manager!(self).close();
+    }
+
+    fn poll_event(&mut self) -> Event {
+        window_manager!(self).poll_event()
+    }
+
+    fn get_provider(&self) -> WindowProvider {
+        window_manager!(self).get_provider()
+    }
+
+    fn get_properties(&self) -> &WindowProperty {
+        window_manager!(self).get_properties()
+    }
+
+    fn set_property(&mut self, property : WindowPropertySet) -> Result<usize, (WindowPropertySet, StudioError)> {
+        window_manager!(self).set_property(property)
+    }
+
+    fn set_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, (WindowPropertySet, StudioError)> {
+        window_manager!(self).set_properties(properties)
+    }
+
+    fn get_window_handle(&self) -> Option<*const usize> {
+        window_manager!(self).get_window_handle()
+    }
+
+    fn get_display_handle(&self) -> Option<*const usize> {
+        window_manager!(self).get_display_handle()
+    }
+
+    
+
+    
+
+}
+
+/*
 /// Redirect call to the correct window manager
 macro_rules! linux_wm {
     ($self:ident) => {
-        match DefaultLinuxWindowProvider {
-            WindowProvider::Wayland => todo!(),
-            WindowProvider::X11 => $self.x11manager.unwrap(),
-            _ => { panic!("Provider not compatible!") }
+        unsafe {
+            match DefaultLinuxWindowProvider{
+                Some(provider) => match provider {
+                    WindowProvider::Wayland => todo!(),
+                    WindowProvider::X11 => $self.x11manager.unwrap(),
+                    _ => { panic!("Provider not compatible!") }
+                },
+                None => panic!("Linux Provider not specified!"),
+            }
         }
     };
 }
@@ -39,14 +152,19 @@ impl LinuxWindowManager {
     pub fn from_provider(provider: WindowProvider) -> Result<LinuxWindowManager, StudioError> {
         match provider {
             WindowProvider::Wayland => todo!(),
-            WindowProvider::X11 => X11WindowManager::new(),
-            _ => { panic!("Provider not compatible!") }
+            WindowProvider::X11 => match X11WindowManager::new() {
+                Ok(manager) => {
+                    Ok(LinuxWindowManager { x11manager: Some(manager) })
+                },
+                Err(err) => Err(err),
+            },
+            _ => Err(StudioError::Display(DisplayError::NotSupported)),
         }
 
     }
 }
 
-impl WindowManager for LinuxWindowManager {
+impl<'window> WindowManager<'window> for LinuxWindowManager {
     /// Create a new LinuxWindowManager according to DefaultLinuxWindowProvider.
     /// If DefaultLinuxWindowProvider is None, will try to see if Wayland is compatible
     /// then fallback to X11. 
@@ -62,13 +180,28 @@ impl WindowManager for LinuxWindowManager {
     }
 
     #[inline(always)]
+    fn get_window_provider(&self) -> WindowProvider {
+        linux_wm!(self).get_window_provider()
+    }
+
+    #[inline(always)]
     fn poll_event(&mut self) -> Event  {
         linux_wm!(self).poll_event()
     }
 
     #[inline(always)]
-    fn show(&mut self, parameters : WindowManagerShowParameters) {
+    fn send_event(&mut self, event : Event) {
+        linux_wm!(self).send_event(event);
+    }
+
+    #[inline(always)]
+    fn show(&mut self, parameters : WindowManagerParameter) {
         linux_wm!(self).show(parameters);
+    }
+
+    #[inline(always)]
+    fn show_child(&mut self, parent : &dyn WindowManager, parameters : WindowManagerParameter, option : WindowChildDisplayOption) {
+        linux_wm!(self).show_child(parent, parameters, option);
     }
 
     #[inline(always)]
@@ -87,8 +220,33 @@ impl WindowManager for LinuxWindowManager {
     }
 
     #[inline(always)]
-    fn get_screen_list(&self) -> &ScreenList {
-        linux_wm!(self).get_screen_list()
+    fn get_screen_list(&self) -> Result<&ScreenList, StudioError> {
+
+        // Cache screen list.
+        match &LinuxScreenList {
+            Some(screens) => {
+                Ok(&screens)
+            },
+            None => {
+                match linux_wm!(self).get_screen_list(){
+                    Ok(screens) => {
+                        LinuxScreenList = Some(*screens);
+                        Ok(screens)
+                    },
+                    Err(err) => Err(err),
+                }
+            } 
+        }
+    }
+
+    #[inline(always)]
+    fn show_decoration(&mut self) {
+        linux_wm!(self).show_decoration();
+    }
+
+    #[inline(always)]
+    fn hide_decoration(&mut self) {
+        linux_wm!(self).hide_decoration();
     }
 
     #[inline(always)]
@@ -153,7 +311,7 @@ impl WindowManager for LinuxWindowManager {
 
     #[inline(always)]
     fn get_middle_button_index(&self) -> u32 {
-        linux_wm!(self)..self.get_middle_button_index()
+        linux_wm!(self).get_middle_button_index()
     }
 
     #[inline(always)]
@@ -185,9 +343,15 @@ impl WindowManager for LinuxWindowManager {
     fn get_scroll_right_index(&self) -> u32 {
         linux_wm!(self).get_scroll_right_index()
     }
-   
-}
 
+    fn as_any(&'window self) -> &dyn Any {
+        todo!()
+    }
+
+
+
+}
+*/
 
 /*
 /// Get linux Display. Will try wayland as provider first then X11.

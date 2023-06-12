@@ -82,8 +82,14 @@ pub enum EventWindow {
     /// Happens when Display lose focus.
     Blur(),
 
-    /// Happens when Display closes.
-    Close(),
+    /// Happens when a child closed.
+    ChildClosed(),
+
+    /// Happens when a close request is sent from the client.
+    CloseRequest(),
+
+    /// Happens when a window was closed.
+    Closed(),
 }
 
 impl std::fmt::Debug for EventWindow {
@@ -103,7 +109,9 @@ impl std::fmt::Debug for EventWindow {
             Self::CursorLeave() => f.debug_tuple("CursorLeave").finish(),
             Self::Focus() => f.debug_tuple("Focus").finish(),
             Self::Blur() => f.debug_tuple("Blur").finish(),
-            Self::Close() => f.debug_tuple("Close").finish(),
+            Self::ChildClosed() => f.debug_tuple("ChildClosed").finish(),
+            Self::CloseRequest() => f.debug_tuple("CloseRequest").finish(),
+            Self::Closed() => f.debug_tuple("Closed").finish(),
         }
     }
 }
@@ -133,8 +141,11 @@ impl std::fmt::Debug for EventKeyboard {
 #[derive(Copy, Clone)]
 pub enum EventMouse {
 
-    // Mouse move event. Provides new (x, y) position or acceleration according to [DisplayMotionMode].
+    // Mouse move event. Provides new (x, y) position. Only when in pointer mode.
     Moved((i32, i32)),
+
+    // Mouse acceleration event.  Provides delta (x, y). Only when in acceleration mode.
+    Acceleration((i32, i32)),
 
     // Mouse button down event. Provides button number (up to 255) and cursor position (x,y).
     ButtonDown(u8, (i32, i32)),
@@ -151,6 +162,7 @@ impl std::fmt::Debug for EventMouse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Moved(arg0) => f.debug_tuple("Moved").field(arg0).finish(),
+            Self::Acceleration(arg0) => f.debug_tuple("Acceleration").field(arg0).finish(),
             Self::ButtonDown(arg0, arg1) => f.debug_tuple("ButtonDown").field(arg0).field(arg1).finish(),
             Self::ButtonUp(arg0, arg1) => f.debug_tuple("ButtonUp").field(arg0).field(arg1).finish(),
             Self::Wheel(arg0, arg1) => f.debug_tuple("Wheel").field(arg0).field(arg1).finish(),
