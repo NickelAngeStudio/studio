@@ -1,6 +1,6 @@
-use std::{cell::RefCell, ffi::CString, rc::Rc};
+use std::{ffi::CString, rc::Rc};
 
-use crate::{display::desktop::{property::{WindowPropertySet, WindowPositionOption, FullScreenMode, KeyboardPropertySet, PointerPropertySet, PointerMode, WindowProperty, SubWindowOption}, provider::linux::LinuxWindow, window::Window}, error::StudioError};
+use crate::{display::desktop::{property::{WindowPropertySet, WindowPositionOption, FullScreenMode, KeyboardPropertySet, PointerPropertySet, PointerMode, WindowProperty, SubWindowOption}, window::Window}, error::StudioError};
 use crate::display::desktop::window::WindowType;
 
 use super::{X11Window, cbind::{constants::{PropModeReplace, GrabModeAsync, CurrentTime}}};
@@ -8,10 +8,10 @@ use super::cbind::functs::*;
 
 
 
-impl X11Window {
+impl<'window> X11Window<'window> {
     /// Handle property changes
     #[inline(always)]
-    pub(crate) fn set_window_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, (WindowPropertySet, StudioError)> {
+    pub(crate) fn set_window_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, StudioError> {
 
         // Flag that indicate if window needs to be recreated.
         let mut recreate_window = false;
@@ -29,7 +29,7 @@ impl X11Window {
                     // Increment property changes
                     count += 1;
                 },
-                Err(err) => return Err((*property, err)),   // On error, return property and error 
+                Err(err) => return Err(err),   
             }
         }
 
@@ -51,7 +51,7 @@ impl X11Window {
 
         match property{
             WindowPropertySet::SetParent(parent, option) => {
-                match self.set_parent(parent, option) {
+                match self.set_parent(&mut parent, option) {
                     Ok(new_parent) =>  recreate_window = new_parent,               // If new parent, recreate window.
                     Err(err) => return Err(err),       // Parent change failed.
                 }
@@ -95,9 +95,46 @@ impl X11Window {
     }
 
     #[inline(always)]
-    fn set_parent(&mut self, parent : &WindowType, option : &SubWindowOption) -> Result<bool, StudioError>{
+    fn set_parent(&mut self, parent : &mut WindowType, option : &SubWindowOption) -> Result<bool, StudioError>{
+
         
-        if Rc::ptr_eq(&parent.get_window_rcref(), &self.property.parent.unwrap().borrow().get_window_rcref()){  // If same parent, do nothing
+        match &self.property.parent {
+            Some(current_parent) => {
+                if *current_parent as *const _ == parent as *const _ {
+                    return Ok(false);
+                }
+            },
+            None =>{},
+        }
+
+        if self.linux_window as *const _ == parent as *const _ {      // Make sure parent and child aren't the same.
+            Err(StudioError::Display(crate::display::DisplayError::ParentSameAsSub))
+        } else if self.is_parent_sub_of_self(parent) {                 // Make sure parent wasn't a child of the parent.
+            Err(StudioError::Display(crate::display::DisplayError::ParentIsSubOfWindow))
+        } else {
+            match self.remove_parent(){ // Remove current parent
+                Ok(_) => {
+                    // If remove successful, add to new parent.
+                    parent.get_properties_mut().add_sub(self.linux_window);
+
+                    // Set new parent reference.
+                    self.property.parent = Some(parent);
+
+                    // Set self subwindow option
+                    self.property.subwindow_option = Some(*option);
+
+                    // Return parent changed
+                    Ok(true)
+                },
+                Err(err) => Err(err),
+            }
+        }
+        
+
+
+
+        /* 
+        if Rc::ptr_eq(&parent.get_window_rcref().clone(), &self.property.parent.unwrap().borrow().get_window_rcref()){  // If same parent, do nothing
             Ok(false)
         } else if Rc::ptr_eq(&parent.get_window_rcref(), &self.get_window_rcref()) {       // Make sure parent and child aren't the same.
             Err(StudioError::Display(crate::display::DisplayError::ParentSameAsSub))
@@ -112,12 +149,16 @@ impl X11Window {
                     // Set new parent reference.
                     self.property.parent = Some(parent.get_window_rcref().clone());
 
+                    // Set self subwindow option
+                    self.property.subwindow_option = Some(*option);
+
                     // Return parent changed
                     Ok(true)
                 },
                 Err(err) => Err(err),
             }
         }
+        */
     }
 
     /// Remove parent of window, making it parentless.
@@ -127,15 +168,15 @@ impl X11Window {
     /// Returns StudioError ParentIsLocked if parent is locked by modal.
     #[inline(always)]
     fn remove_parent(&mut self) -> Result<bool, StudioError>{
-        match self.property.parent {
+        match &self.property.parent {
             Some(old_parent) => {   // If old parent is locked, raise error
                 // If locked, return Err(ParentIsLocked)
-                if old_parent.borrow().get_properties().locked {
+                if old_parent.get_properties().locked {
                     Err(StudioError::Display(crate::display::DisplayError::ParentIsLocked))
                 } else {
 
                     // Remove sub window from parent.
-                    old_parent.borrow_mut().get_properties_mut().remove_sub(self.get_window_rcref());
+                    old_parent.get_properties_mut().remove_sub(self.linux_window);
 
                     // Remove window parent.
                     self.property.parent = Option::None;
@@ -157,12 +198,14 @@ impl X11Window {
 
         let mut is_parent = false;
         
-        for sub in self.get_properties().subs {
+        for sub in &self.get_properties().subs {
 
-            if Rc::ptr_eq(&sub, &parent.get_window_rcref()){
+            if *sub as *const _ == parent as *const _ {
                 is_parent = true;
             } else {
-                is_parent = is_parent || sub.borrow().x11.unwrap().is_parent_sub_of_self(parent);
+                if let Some(x11) = &sub.x11 {
+                    is_parent = is_parent || x11.is_parent_sub_of_self(parent);
+                }                
             }
 
         }
@@ -183,9 +226,9 @@ impl X11Window {
     fn set_relative_position(&mut self, option: &WindowPositionOption) -> Result<bool, StudioError>{
 
         // Update relative position option.
-        self.property.relative_position = *option;
+        self.property.relative_position = option.clone();
 
-        match WindowPositionOption::get_absolute_position_from_relative(&self.get_window_rcref().clone().borrow(), option) {
+        match WindowPositionOption::get_absolute_position_from_relative(&self.linux_window, option) {
             Ok(position) => {
                 self.set_absolute_position(position);
 
@@ -272,12 +315,12 @@ impl X11Window {
     }
 
     #[inline(always)]
-    fn enable_autorepeat(&self){
+    fn enable_autorepeat(&mut self){
         self.property.keyboard.auto_repeat = true;
     }
 
     #[inline(always)]
-    fn disable_autorepeat(&self){
+    fn disable_autorepeat(&mut self){
         self.property.keyboard.auto_repeat = false;
     }
 
@@ -294,18 +337,21 @@ impl X11Window {
     }
 
     #[inline(always)]
-    fn set_pointer_mode(&self, mode : &PointerMode){
+    fn set_pointer_mode(&mut self, mode : &PointerMode){
         self.property.pointer.mode = *mode;
 
         match mode {
             // Set cursor to center if Acceleration
-            PointerMode::Acceleration => self.set_pointer_position(&self.property.center),
+            PointerMode::Acceleration => {
+                let center = self.property.center;
+                self.set_pointer_position(&center)
+            },
             _ => {},
         }
     }
 
     #[inline(always)]
-    fn set_pointer_position(&self, position : &(i32, i32)){
+    pub(super) fn set_pointer_position(&mut self, position : &(i32, i32)){
         unsafe {
             self.property.pointer.position = *position;
             XWarpPointer(self.display, self.window, self.window, 0, 0, 
@@ -314,7 +360,7 @@ impl X11Window {
     }
 
     #[inline(always)]
-    pub(crate) fn show_pointer(&self){
+    pub(crate) fn show_pointer(&mut self){
         unsafe {
             if !self.property.pointer.visible {    // Make sure X hide cursor was called prior to show.
                 XFixesShowCursor(self.display, self.window);
@@ -325,7 +371,7 @@ impl X11Window {
     }
 
     #[inline(always)]
-    pub(crate) fn hide_pointer(&self){
+    pub(crate) fn hide_pointer(&mut self){
         unsafe {
             if self.property.pointer.visible {
                 self.property.pointer.visible = false;
@@ -336,7 +382,7 @@ impl X11Window {
     }
 
     #[inline(always)]
-    pub(crate) fn confine_pointer(&self){
+    pub(crate) fn confine_pointer(&mut self){
         unsafe {
             self.property.pointer.visible = true;
             XGrabPointer(self.display, self.window, true, 
@@ -346,7 +392,7 @@ impl X11Window {
     }
 
     #[inline(always)]
-    pub(crate) fn release_pointer(&self){
+    pub(crate) fn release_pointer(&mut self){
         unsafe {
             self.property.pointer.visible = false;
             XUngrabPointer(self.display, CurrentTime);

@@ -6,7 +6,7 @@ target_cfg! {
         pub mod desktop;
 
         // Reimport desktop error as DisplayError.
-        pub use desktop::error::DesktopError as DisplayError;
+        pub use desktop::error::DisplayError as DisplayError;
     },
 
     mobile => {

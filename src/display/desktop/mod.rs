@@ -9,7 +9,7 @@ pub mod error;
 pub mod screen;
 
 // Window manager definition.
-//pub mod manager;
+pub mod manager;
 
 // Window definition.
 pub mod window;

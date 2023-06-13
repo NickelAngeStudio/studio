@@ -1,82 +1,157 @@
 //! Window abstraction and properties
 
+target_cfg! {
+    linux => {
+        pub type WindowManagerType = super::provider::linux::LinuxWindowManager;
+    }
+}
+
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use cfg_boost::{ target_cfg};
+use cfg_boost::{ target_cfg, match_cfg};
 
+use crate::display::DisplayError;
 use crate::error::StudioError;
 
 
+use super::manager::WindowManager;
 use super::property::{WindowPropertySet, WindowProperty};
 use super::event::{Event};
 use super::provider::WindowProvider;
+use super::provider::linux::x11::X11WindowManager;
 use super::screen::{ScreenList};
 
-// Window type alias definition
-target_cfg! {
-    linux => {
-        /// [Window] type alias according to platform.
-        pub type WindowType = super::provider::linux::LinuxWindow;
-    },
-}
-
-
-
-/// Window abstraction.
+/// Window with a manager.
 /// 
 /// Steps :
 /// new()
 /// set_properties
 /// show()
-pub trait Window {
+pub struct Window {
+
+    /// [WindowManager] of this window
+    manager : WindowManagerType,
+
+    /// [Window] properties
+    property : WindowProperty,
+
+
+}
+
+
+impl Window {
+
+    /// Create a new [Window] with the correct window manager.
+    /// 
+    /// Returns Ok([Window]) on success, Err([StudioError]) on error.
+    pub fn new() -> Result<Window, StudioError> {
+
+        match WindowManagerType::new() {
+            Ok(wm) => {
+                Ok(Window { 
+                    manager: wm, 
+                    property: WindowProperty::new() })
+            },
+            Err(err) => Err(err),
+        }        
+    }
 
     // Create a new [Window] wrapped in a mutable reference counter.
     /// 
     /// Returns Ok([Window]) on success, Err([StudioError]) on error.
-    fn new() -> Result<Self, StudioError> where Self: Sized;
+    /*
+    pub fn new() -> Result<Window<WM>, StudioError> {
+
+        match_cfg! {
+            linux => {
+                if crate::display::desktop::provider::linux::wayland::WaylandWindowManager::is_supported() {
+                    Ok(Window::<WaylandWindowManager> { 
+                        manager: crate::display::desktop::provider::linux::wayland::WaylandWindowManager::new(), 
+                        property: WindowProperty::new() 
+                    })
+                } else if crate::display::desktop::provider::linux::x11::X11WindowManager::is_supported() {
+
+                    Ok(Window { 
+                        manager: crate::display::desktop::provider::linux::x11::X11WindowManager::new(), 
+                        property: WindowProperty::new() 
+                    })
+
+                } else {
+                    Err(StudioError::Display(DisplayError::NoDisplayServer))    // No linux display server available
+                }
+                
+            },
+            _ => Err(StudioError::Display(DisplayError::NotSupported)),  // Platform is not supported.
+        }
+
+    }
+    */
+
+    /// Get the window provider id
+    fn get_window_provider(&self) -> WindowProvider{
+        self.manager.get_window_provider()
+    }
 
     /// Show the window. By default, new windows are hidden and .show() must be called.
-    /// 
-    /// Return Ok(true) on success, Err(StudioError) on failure.
-    fn show(&mut self) -> Result<bool, StudioError>;
+    fn show(&mut self) {
+        if !self.property.visible { // Only if not visible
+            self.manager.show(&self.property);
+            self.property.visible = true;
+        }
+    }
 
     // Hide the window. The window ressources are not freed and can still receive events.
-    fn hide(&mut self);
+    fn hide(&mut self){
+        if self.property.visible {  // Only if visible
+            self.manager.hide();
+            self.property.visible = false;
+        }
+    }
  
     // Force close the window. The window ressources are freed and cannot receive events.
-    fn close(&mut self);
+    fn close(&mut self){
+
+    }
 
     /// Pop a window event from the queue.
-    fn poll_event(&mut self) -> Event;
-    
-    /// Get the provider id of this window
-    fn get_provider(&self) -> WindowProvider;
+    fn poll_event(&mut self) -> Event{
+        todo!()
+    }
 
     /// Get window properties in a read only struct.
-    fn get_properties(&self) -> &WindowProperty;
+    fn get_properties(&self) -> &WindowProperty{
+        &self.property
+    }
 
     /// Set a window property according to family.
     /// 
-    /// Return Ok() with the count of property changed on success, Err(StudioError) on failure with the property that cause the failure.
-    fn set_property(&mut self, property : WindowPropertySet) -> Result<usize, (WindowPropertySet, StudioError)>;
+    /// Return Ok() with the count of property changed on success, Err(StudioError) on failure.
+    fn set_property(&mut self, property : WindowPropertySet) -> Result<usize, StudioError>{
+
+    }
 
     /// Set multiple window properties from an array. When setting multiple properties, this function 
     /// is faster because some property need to recreate window. Here this will be done only one time
     /// if window recreate is needed.
     /// 
-    /// Returns Ok() the count of properties changed on success, Err(WindowPropertySet, StudioError) on failure with the
-    /// property that cause the failure.
-    fn set_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, (WindowPropertySet, StudioError)>;
+    /// Returns Ok() the count of properties changed on success, Err(WindowPropertySet, StudioError) on failure.
+    fn set_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, StudioError>{
+
+    }
 
     /// Get the OS Window manager window handle.
-    fn get_window_handle(&self) -> Option<*const usize>;
+    fn get_window_handle(&self) -> Option<*const usize>{
+
+    }
 
     target_cfg! {
         linux => {
             /// Get the OS Window manager display handle.
-            fn get_display_handle(&self) -> Option<*const usize>;
+            fn get_display_handle(&self) -> Option<*const usize>{
+
+            }
         }
     }
 

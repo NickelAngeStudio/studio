@@ -1,58 +1,195 @@
 //! Linux implementations of [Window].
 
-use std::{rc::Rc, cell::RefCell};
 
-use crate::{display::{ desktop::{window::{Window, WindowType}, event::Event, property::{WindowProperty, WindowPropertySet}}, DisplayError}, error::StudioError};
-use self::x11::{ X11Window};
 
-use super::super::screen::ScreenList;
-
+use crate::{display::{ desktop::{ event::Event, property::{WindowProperty}, manager::WindowManager}, DisplayError}, error::StudioError};
+use self::{wayland::WaylandWindowManager, x11::X11WindowManager};
 use super::WindowProvider;
 
-
 /// Wayland DisplayManager
-//pub mod wayland;
+pub mod wayland;
 
 /// X11 DisplayManager
 pub mod x11;
 
-/// Default linux provider. Will be filled if None.
-static mut DefaultLinuxWindowProvider: Option<WindowProvider> = None;
+/// Macro that redirect function to correct window manager. 
+macro_rules! wmfn {
+    ($self : ident, $funct : ident ( $($param : tt)* )) => {
 
-/// Macro that redirect calls to correct window manager. 
-macro_rules! window_manager {
-    ($self : ident) => {
         if $self.use_wayland {
-            $self.wayland.unwrap()
+            $self.x11.unwrap().$funct($($param)*)
         } else {
-            $self.x11.unwrap()
+            $self.wayland.unwrap().$funct($($param)*)
         }
     };
 }
 
+pub(crate) struct LinuxWindowManager {
+
+    use_wayland : bool,
+
+    wayland : Option<WaylandWindowManager>,
+    x11 : Option<X11WindowManager>,
+
+}
+
+impl WindowManager for LinuxWindowManager {
+    fn new() -> Result<Self, StudioError> where Self : Sized {
+        
+        if wayland::WaylandWindowManager::is_supported() {
+            Ok(LinuxWindowManager{ 
+                wayland: Some(wayland::WaylandWindowManager::new().unwrap()), 
+                x11: Option::None,
+                use_wayland: true,
+            })
+        } else if x11::X11WindowManager::is_supported() {
+            Ok(LinuxWindowManager{ 
+                wayland: Option::None, 
+                x11: Some(x11::X11WindowManager::new().unwrap()),
+                use_wayland: false,
+            })
+        } else {    // No supported display server available
+            Err(StudioError::Display(DisplayError::NoDisplayServer))
+        }
+
+    }
+
+    #[inline(always)]
+    fn get_window_provider(&self) -> WindowProvider {
+        wmfn!(self, get_window_provider())
+    }
+
+    #[inline(always)]
+    fn poll_event(&mut self) -> Event  {
+         wmfn!(self, poll_event())
+    }
+
+    #[inline(always)]
+    fn show(&mut self, property : &WindowProperty) {
+        wmfn!(self, show(property))
+    }
+
+    #[inline(always)]
+    fn restore(&mut self) {
+         wmfn!(self, restore());
+    }
+
+    #[inline(always)]
+    fn close(&mut self) {
+         wmfn!(self, close());
+    }
+
+    #[inline(always)]
+    fn hide(&mut self) {
+         wmfn!(self, hide());
+    }
+
+    #[inline(always)]
+    fn set_title(&mut self, title : &String) -> bool {
+         wmfn!(self, set_title(title))
+    }
+
+    #[inline(always)]
+    fn set_position(&mut self, position : (i32,i32)) -> bool {
+         wmfn!(self, set_position(position))
+    }
+
+    #[inline(always)]
+    fn set_size(&mut self, size : &(u32,u32)) -> bool {
+         wmfn!(self, set_size(size))
+    }
+
+    #[inline(always)]
+    fn show_decoration(&mut self) -> bool {
+         wmfn!(self, show_decoration())
+    }
+
+    #[inline(always)]
+    fn hide_decoration(&mut self) -> bool {
+         wmfn!(self, hide_decoration())
+    }
+
+    #[inline(always)]
+    fn minimize(&mut self) -> bool {
+         wmfn!(self, minimize())
+    }
+
+    #[inline(always)]
+    fn maximize(&mut self) -> bool {
+         wmfn!(self, maximize())
+    }
+
+    #[inline(always)]
+    fn enable_autorepeat(&mut self) -> bool {
+         wmfn!(self, enable_autorepeat())
+    }
+
+    #[inline(always)]
+    fn disable_autorepeat(&mut self) -> bool {
+         wmfn!(self, disable_autorepeat())
+    }
+
+    #[inline(always)]
+    fn set_pointer_position(&mut self, position : &(i32, i32)) -> bool {
+         wmfn!(self, set_pointer_position(position))
+    }
+
+    #[inline(always)]
+    fn show_pointer(&mut self) -> bool {
+         wmfn!(self, show_pointer())
+    }
+
+    #[inline(always)]
+    fn hide_pointer(&mut self) -> bool {
+         wmfn!(self, hide_pointer())
+    }
+
+    #[inline(always)]
+    fn confine_pointer(&mut self) -> bool {
+         wmfn!(self, confine_pointer())
+    }
+
+    #[inline(always)]
+    fn release_pointer(&mut self) -> bool {
+         wmfn!(self, release_pointer())
+    }
+
+    #[inline(always)]
+    fn get_window_handle(&self) -> Option<*const usize> {
+        wmfn!(self, get_window_handle())
+    }  
+
+    #[inline(always)]
+    fn get_display_handle(&self) -> Option<*const usize> {
+        wmfn!(self, get_display_handle())
+    }
+
+}
+
+
+
+/*
 /// Linux implementation of a window.
-pub(crate) struct LinuxWindow {
+pub(crate) struct LinuxWindow<'window> {
 
     use_wayland : bool,
     
-    wayland : Option<X11Window>,
-    x11 : Option<X11Window>,
+    wayland : Option<X11Window<'window>>,
+    x11 : Option<X11Window<'window>>,
 
 }
 
-impl LinuxWindow {
+impl<'window> LinuxWindow<'window> {
     pub(crate) fn get_properties_mut(&mut self) -> &mut WindowProperty{
-        window_manager!(self).get_properties_mut()
-    }
-
-    pub(crate) fn get_window_rcref(&self) -> Rc<RefCell<WindowType>> {
-        window_manager!(self).get_window_rcref()
+         wmfn!(self, get_properties_mut()
     }
 }
 
-impl Window for LinuxWindow {
+impl<'window> Window for LinuxWindow<'window> {
 
     fn new() -> Result<Self, StudioError> {
+
+        let mut linux_window = LinuxWindow{ use_wayland: false, wayland: None, x11: None };
         
         match unsafe { DefaultLinuxWindowProvider } {
             Some(provider) => {
@@ -68,9 +205,7 @@ impl Window for LinuxWindow {
                 
                 match X11Window::new(){
                     Ok(mut x11win) => {
-                        let mut window = LinuxWindow{ use_wayland: false, wayland: None, x11: Some(x11win) };
-                        x11win.rc_ref = Some(Rc::new(RefCell::new(window)));    // Create self contain reference to self.
-                        Ok(window)
+                        Ok(linux_window)
                     },
                     Err(err) => Err(err),
                 }
@@ -79,43 +214,43 @@ impl Window for LinuxWindow {
     }
 
     fn show(&mut self) -> Result<bool, StudioError> {
-        window_manager!(self).show()
+         wmfn!(self, show()
     }
 
     fn hide(&mut self) {
-        window_manager!(self).hide();
+         wmfn!(self, hide();
     }
 
     fn close(&mut self) {
-        window_manager!(self).close();
+         wmfn!(self, close();
     }
 
     fn poll_event(&mut self) -> Event {
-        window_manager!(self).poll_event()
+         wmfn!(self, poll_event()
     }
 
     fn get_provider(&self) -> WindowProvider {
-        window_manager!(self).get_provider()
+         wmfn!(self, get_provider()
     }
 
     fn get_properties(&self) -> &WindowProperty {
-        window_manager!(self).get_properties()
+         wmfn!(self, get_properties()
     }
 
-    fn set_property(&mut self, property : WindowPropertySet) -> Result<usize, (WindowPropertySet, StudioError)> {
-        window_manager!(self).set_property(property)
+    fn set_property(&mut self, property : WindowPropertySet) -> Result<usize, StudioError> {
+         wmfn!(self, set_property(property)
     }
 
-    fn set_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, (WindowPropertySet, StudioError)> {
-        window_manager!(self).set_properties(properties)
+    fn set_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, StudioError> {
+         wmfn!(self, set_properties(properties)
     }
 
     fn get_window_handle(&self) -> Option<*const usize> {
-        window_manager!(self).get_window_handle()
+         wmfn!(self, get_window_handle()
     }
 
     fn get_display_handle(&self) -> Option<*const usize> {
-        window_manager!(self).get_display_handle()
+         wmfn!(self, get_display_handle()
     }
 
     
@@ -123,7 +258,7 @@ impl Window for LinuxWindow {
     
 
 }
-
+*/
 /*
 /// Redirect call to the correct window manager
 macro_rules! linux_wm {

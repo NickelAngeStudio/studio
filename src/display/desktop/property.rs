@@ -43,6 +43,7 @@ pub enum FullScreenMode {
 }
 
 /// Enumeration of possible window positions when setting position.
+#[derive(Clone)]
 pub enum WindowPositionOption {
     /// Position window on desktop from an absolute pair of x,y coordinates.
     Desktop((i32, i32)),
@@ -77,9 +78,9 @@ impl WindowPositionOption {
 
             // Add parent position. Will raise error if no parent.
             WindowPositionOption::Parent(position) => {
-                match window.get_properties().parent {  // Verify if parent, then raise error if None.
+                match &window.get_properties().parent {  // Verify if parent, then raise error if None.
                     Some(parent) => {
-                        let parent_pos = parent.borrow().get_properties().position;
+                        let parent_pos = parent.get_properties().position;
                         Ok((parent_pos.0 + position.0, parent_pos.1 + position.1))
                     },
                     None => Err(StudioError::Display(crate::display::DisplayError::PositionNoParent)),
@@ -95,10 +96,10 @@ impl WindowPositionOption {
             },
 
 
-            WindowPositionOption::CenterParent => match window.get_properties().parent {  // Verify if parent, then raise error if None.
+            WindowPositionOption::CenterParent => match &window.get_properties().parent {  // Verify if parent, then raise error if None.
                     Some(parent) => {
-                        let parent_pos = parent.borrow().get_properties().position;
-                        let parent_size =  parent.borrow().get_properties().size;
+                        let parent_pos = parent.get_properties().position;
+                        let parent_size =  parent.get_properties().size;
                         let size = window.get_properties().size;
 
                         Ok((parent_pos.0 + ((parent_size.0 - size.0) / 2) as i32, parent_pos.1 + ((parent_size.1 - size.1) / 2) as i32))
@@ -158,6 +159,7 @@ pub enum PointerMode {
 }
 
 /// Enumeration of possible sub window display options.
+#[derive(Clone, Copy)]
 pub(crate) enum SubWindowOption {
 
     /// Child is showed as normal window.
@@ -226,10 +228,14 @@ pub struct WindowProperty {
     pub keyboard : KeyboardProperty,
 
     /// Parent window reference cell (if any)
-    pub parent : Option<Rc<RefCell<WindowType>>>,
+    //pub parent : Option<Rc<RefCell<WindowType>>>,
+    pub parent : Option<WindowType>,
 
     /// Subwindow array
-    pub subs : Vec<Rc<RefCell<WindowType>>>,
+    pub subs : Vec<WindowType>,
+
+    /// Subwindow option for this window.
+    pub subwindow_option : Option<SubWindowOption>,
 
     /// Window title
     pub title : String,
@@ -289,18 +295,19 @@ impl WindowProperty{
             parent: None,
             subs: Vec::new(),
             locked: false,
-            relative_position: WindowPositionOption::Desktop((0,0)), 
+            relative_position: WindowPositionOption::Desktop((0,0)),
+            subwindow_option: None, 
         }
     }
 
     /// Add a sub window.
     /// 
     /// Returns Ok(true) on success or Err(StudioError) if already added or owned.
-    pub(crate) fn add_sub(& mut self, sub: Rc<RefCell<WindowType>>){
+    pub(crate) fn add_sub(& mut self, sub: & WindowType){
 
         // usize::MAX means subwindow was not found.
-        if self.get_sub_index(sub) == usize::MAX {
-            self.subs.push(sub.clone())
+        if self.get_sub_index(sub.clone()) == usize::MAX {
+            self.subs.push(sub)
         }
 
     }
@@ -308,7 +315,7 @@ impl WindowProperty{
     /// Remove a subwindow from the subwindow array.
     /// 
     /// Returns index as usize of deleted.
-    pub(crate) fn remove_sub(&mut self, sub: Rc<RefCell<WindowType>>)-> usize {
+    pub(crate) fn remove_sub(&mut self, sub: & WindowType)-> usize {
 
         let index = self.get_sub_index(sub);
 
@@ -323,10 +330,10 @@ impl WindowProperty{
     /// Get index of subwindow in array.
     /// 
     /// Returns Ok(index) on success, usize::MAX on failure.
-    fn get_sub_index(&mut self, sub: Rc<RefCell<WindowType>>) -> usize {
+    fn get_sub_index(&mut self, sub: & WindowType) -> usize {
         for i in 0..self.subs.len() {
             match self.subs.get(i){
-                Some(sw) => if Rc::ptr_eq(sw, &sub) {
+                Some(sw) => if *sw as *const _ == sub as * const _ {
                     return i
                 },
                 None => {},

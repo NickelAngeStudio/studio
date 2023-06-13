@@ -2,16 +2,16 @@
 
 use std::{ffi::{c_int, c_ulong, c_char}, ptr::null_mut};
 
-use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}};
+use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}, manager::WindowManager};
 
-use super::{ cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent, XEventsQueued, XSync}}, X11Window};
+use super::{ cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent, XEventsQueued, XSync}}, X11WindowManager};
 use super::cbind::{constants::* };
 
 
 /// Constant value of the window closing message.
 pub const WINDOW_CLOSING_MESSAGE_TYPE:u64 = 327;
 
-impl X11Window {
+impl X11WindowManager {
 
     /// Get the event queue count
     #[inline(always)]
@@ -108,7 +108,7 @@ impl X11Window {
     pub(super) fn get_key_release_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
 
-            if self.parameters.auto_repeat {  // No anti-repeat routine
+            if self.auto_repeat {  // No anti-repeat routine
                 Event::Keyboard(EventKeyboard::KeyUp(xevent._xkey._keycode))
             } else {    // Use anti-repeat routine
                 self.get_anti_repeat_key_release_event(xevent)
@@ -179,6 +179,26 @@ impl X11Window {
     pub(super) fn get_motion_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y)))
+            /*
+            match self.property.pointer.mode{
+                PointerMode::Cursor => Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y))),
+                PointerMode::Acceleration => {
+                    // Calc delta acceleration
+                    let acceleration = (xevent._xmotion._x - self.property.center.0, 
+                        xevent._xmotion._y - self.property.center.1);
+
+                    if acceleration.0 != 0 && acceleration.1 != 0 { // Send acceleration only if it moved.
+                        // Reset pointer to center
+                        self.set_pointer_position(&self.property.center);
+
+                        // Send acceleration event.
+                        Event::Mouse(EventMouse::Acceleration(acceleration))
+                    } else {
+                        self.get_event()   // Ignore and poll next event
+                    }
+                },     
+            }
+            */
         }
     }
 
@@ -187,8 +207,8 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_enter_notify_event(&mut self, _xevent : &XEvent) -> Event {
         // Hide cursor if supposed to be hidden.
-        if !self.parameters.pointer_visible {
-            self.parameters.pointer_visible = true;
+        if !self.pointer_visible {
+            self.pointer_visible = true;
             self.hide_pointer();
         }
 
@@ -200,9 +220,9 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_leave_notify_event(&mut self, _xevent : &XEvent) -> Event {
          // Show hidden cursor when out of window.
-         if !self.parameters.pointer_visible {
+         if !self.pointer_visible {
             self.show_pointer();
-            self.parameters.pointer_visible = false;    // Tell pointer it is still hidden
+            self.pointer_visible = false;    // Tell pointer it is still hidden
         }
 
         Event::Window(EventWindow::CursorLeave())
@@ -213,7 +233,7 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_focus_in_event(&mut self, _xevent : &XEvent) -> Event {
         // If cursor is confined, confine cursor on focus.
-        if self.parameters.pointer_confined {
+        if self.pointer_confined {
             self.confine_pointer();
         }
 
@@ -225,9 +245,9 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_focus_out_event(&mut self, _xevent : &XEvent) -> Event {
         // If cursor is confined, confine cursor on focus.
-        if self.parameters.pointer_confined {
+        if self.pointer_confined {
             self.release_pointer();
-            self.parameters.pointer_confined = true;    // Tell pointer it is still confined
+            self.pointer_confined = true;    // Tell pointer it is still confined
         }
 
         Event::Window(EventWindow::Blur())
@@ -365,17 +385,16 @@ impl X11Window {
             // By default, set event as none.
             let mut event = Event::None;
 
-            if position != self.parameters.position && size != self.parameters.size {
+            if position != self.position && size != self.size {
                 event = Event::Window(EventWindow::MovedResized(position, size));
-            } else if position != self.parameters.position {
+            } else if position != self.position {
                 event = Event::Window(EventWindow::Moved(position));
-            } else if size != self.parameters.size  {
+            } else if size != self.size  {
                 event = Event::Window(EventWindow::Resized(size));
             }
 
-            // Update window parameters
-            self.parameters.position = position;
-            self.parameters.size = size;
+            self.position = position;
+            self.size = size;
 
             event
         }
@@ -539,29 +558,29 @@ impl X11Window {
 
             // Return event. By priority > Fullscreen > Minimized > Maximized > Restored > None
             if fullscreen {   // Send fullscreen if not already registered.
-                if !self.parameters.full_screen {
+                if !self.fullscreen {
                     event = Event::Window(EventWindow::Fullscreen());
                 }
             } else if hidden {   // Send minimized if not already registered.
-                    if !self.parameters.minimized {
+                    if !self.minimized {
                         event = Event::Window(EventWindow::Minimized());
                     }
             } else if maximized {   // Send maximized if not already registered.
-                if !self.parameters.maximized {
+                if !self.maximized {
                     event = Event::Window(EventWindow::Maximized());
                 }
             } else {    // Send restore if not already registered.
-                if self.parameters.full_screen != fullscreen || 
-                    self.parameters.maximized != maximized || 
-                    self.parameters.minimized != hidden {
+                if self.fullscreen != fullscreen || 
+                    self.maximized != maximized || 
+                    self.minimized != hidden {
                         event = Event::Window(EventWindow::Restored());
                     }
             }
 
             // Update window properties
-            self.parameters.full_screen = fullscreen;
-            self.parameters.maximized = maximized;
-            self.parameters.minimized = hidden;
+            self.fullscreen = fullscreen;
+            self.maximized = maximized;
+            self.minimized = hidden;
 
             event
         }

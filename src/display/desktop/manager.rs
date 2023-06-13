@@ -1,70 +1,16 @@
-use std::any::Any;
+use cfg_boost::target_cfg;
 
 use crate::error::StudioError;
 
-use super::{event::Event, screen::ScreenList, provider::WindowProvider, property::WindowProperty, window::WindowChildDisplayOption};
-
-/// Window manager parameters used to create window.
-pub(crate) struct WindowManagerParameter {
-
-    /// Position of window as pair of i32(x,y)
-    pub(crate) position : (i32, i32),
-
-    /// Size of window as pair of u32 (width, height).
-    pub(crate) size : (u32, u32),
-
-    /// Window is full screen
-    pub(crate) full_screen:bool,
-
-    /// Pointer is visible
-    pub(crate) pointer_visible:bool,
-
-    /// Pointer is confined
-    pub(crate) pointer_confined:bool,
-
-    /// Auto key repeat is enabled
-    pub(crate) auto_repeat:bool,
-
-    /// Show window decoration (title bar, etc...)
-    pub(crate) decoration:bool,
-
-    /// Window is minimized
-    pub(crate) minimized:bool,
-
-    /// Window is maximized
-    pub(crate) maximized:bool,
-}
-
-impl WindowManagerParameter {
-
-    /// Create a new [WindowManagerParameter] from referenced [windowProperty].
-    pub fn from_property(property: &WindowProperty) -> WindowManagerParameter{
-        WindowManagerParameter{ 
-            position: property.position, 
-            size: property.size, 
-            full_screen: property.fullscreen, 
-            pointer_visible: property.pointer.visible, 
-            pointer_confined: property.pointer.confined, 
-            auto_repeat: property.keyboard.auto_repeat, 
-            decoration: property.decoration,
-            minimized: property.minimized,
-            maximized: property.maximized, }
-    }
-
-    /// Create parameters with default value
-    pub fn default() -> WindowManagerParameter {
-        WindowManagerParameter{ position: (0,0), size: (0,0), full_screen: false, pointer_visible: true, pointer_confined: false, 
-            auto_repeat: false, decoration: true, minimized: false, maximized: false }
-    }
-
-}
+use super::{event::Event, provider::WindowProvider, property::{WindowProperty} };
 
 
-pub trait WindowManager<'window> {
-    /// Create a new instance of Window manager.
-    /// 
-    /// Return Ok(Self) on success and Err([StudioError]) on error.
-    fn new() -> Result<Self, StudioError> where Self: Sized;
+/// Manager that manage the [Window].
+/// 
+/// Each property set returns either true or false depending if window need to be recreate.
+pub trait WindowManager {
+    /// Create a new WindowManager instance.
+    fn new() -> Result<Self, StudioError> where Self : Sized;
 
     /// Get the window provider id
     fn get_window_provider(&self) -> WindowProvider;
@@ -72,16 +18,8 @@ pub trait WindowManager<'window> {
     /// Pop an event from the manager.
     fn poll_event(&mut self) -> Event ;
 
-    /// Send an event to the manager to be retained until poll.
-    /// 
-    /// NOTE: This won't trigger changes. Sending a resize event won't resize the window.
-    fn send_event(&mut self, event : Event);
-
-    /// Show the window according to parameters
-    fn show(&mut self, parameters : WindowManagerParameter);
-
-    /// Show as child window according to child format and parent manager.
-    fn show_child(&mut self, parent : &dyn WindowManager, parameters : WindowManagerParameter, option : WindowChildDisplayOption);
+    /// Show the window according to [WindowProperty]
+    fn show(&mut self, property : &WindowProperty);
 
     /// Restore window to previous state.
     fn restore(&mut self);
@@ -92,73 +30,63 @@ pub trait WindowManager<'window> {
     /// Hide the window.
     fn hide(&mut self);
 
-    /// Get the list of hardware screen display.
-    fn get_screen_list(&self) -> Result<&ScreenList, StudioError>;
+    /// Get the OS Window manager window handle.
+    fn get_window_handle(&self) -> Option<*const usize>;
 
-    /// Show window default decoration like title bar, buttons, etc..
-    fn show_decoration(&mut self);
+    target_cfg! {
+        linux => {
+            /// Get the OS Window manager display handle.
+            fn get_display_handle(&self) -> Option<*const usize>;
+        }
+    }
 
-    /// Hide window default decoration like title bar, buttons, etc..
-    fn hide_decoration(&mut self);
+    /// Set the window title.
+    fn set_title(&mut self, title : &String) -> bool;
 
-    /// Tell manager to set the new window title
-    fn set_title(&mut self, title:&str);
+    /// Set window absolute position.
+    fn set_position(&mut self, position : (i32,i32)) -> bool;
 
-    /// Tell manager to set the window size.
-    fn set_size(&mut self, size : (u32, u32));
+    /// Set window size.
+    fn set_size(&mut self, size : &(u32,u32)) -> bool;
 
-    /// Tell manager to set the window position.
-    fn set_position(&mut self, position : (i32,i32));
+    /// Show window decoration such as title bar, buttons, etc...
+    fn show_decoration(&mut self) -> bool;
 
-    /// Tell manager to set the pointer position.
-    fn set_pointer_position(&mut self, position : (i32,i32));
+    /// Hide window decoration such as title bar, buttons, etc...
+    fn hide_decoration(&mut self) -> bool;
 
-    /// Tell manager to hide the pointer.
-    fn hide_pointer(&mut self);
+    /// Minimize window into taskbar.
+    fn minimize(&mut self) -> bool;
 
-    /// Tell manager to show the pointer.
-    fn show_pointer(&mut self);
+    /// Maximize window.
+    fn maximize(&mut self) -> bool;
 
-    /// Tell manager to confine the pointer to the window.
-    fn confine_pointer(&mut self);
+    /// Setting window fullscreen trigger 
+    /// window recreate.
+    /// 
+    /// This need to be overriden if not the case.
+    fn set_fullscreen(&mut self) -> bool { true }
 
-    /// Tell manager to release the pointer from window.
-    fn release_pointer(&mut self);
+    /// Enable keyboard key auto-repeat when hold.
+    fn enable_autorepeat(&mut self) -> bool;
 
-    /// Tell manager to enable auto key repeat
-    fn enable_autorepeat(&mut self);
+    /// Disable keyboard key auto-repeat when hold.
+    fn disable_autorepeat(&mut self) -> bool;
 
-    /// Tell manager to disable auto key repeat
-    fn disable_autorepeat(&mut self);
+    /// Set the pointer position relative to the window.
+    fn set_pointer_position(&mut self, position : &(i32, i32)) -> bool;
 
-    /// Get the left button index of the mouse.
-    fn get_left_button_index(&self) -> u32;
+    /// Show the pointer, making it visible.
+    fn show_pointer(&mut self) -> bool;
 
-    /// Get the right button index of the mouse.
-    fn get_right_button_index(&self) -> u32;
+    /// Hide the pointer, making it invisible.
+    fn hide_pointer(&mut self) -> bool;
 
-    /// Get the middle button index of the mouse.
-    fn get_middle_button_index(&self) -> u32;
+    /// Confine the pointer to window boundaries, preventing escape.
+    fn confine_pointer(&mut self) -> bool;
 
-    /// Get the next button index of the mouse.
-    fn get_next_button_index(&self) -> u32;
+    /// Release the pointer from window boundaries, allowing escape.
+    fn release_pointer(&mut self) -> bool;
 
-    /// Get the previous button index of the mouse.
-    fn get_previous_button_index(&self) -> u32;
-
-    /// Get the scroll up index of the mouse.
-    fn get_scroll_up_index(&self) -> u32;
-
-    /// Get the scroll down index of the mouse.
-    fn get_scroll_down_index(&self) -> u32;
-    
-    /// Get the scroll left index of the mouse.
-    fn get_scroll_left_index(&self) -> u32;
-
-    /// Get the scroll right index of the mouse.
-    fn get_scroll_right_index(&self) -> u32;
-
-    /// Cast self as Any for downcast when needed.
-    fn as_any(&'window self) -> &dyn Any;
 
 }

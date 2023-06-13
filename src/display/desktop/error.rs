@@ -2,7 +2,7 @@
 
 /// Enumeration of possible desktop errors
 #[derive(Debug, Clone, Copy)]
-pub enum DesktopError {
+pub enum DisplayError {
 
     /// Happens when a display manager is not supported.
     NotSupported,
