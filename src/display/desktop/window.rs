@@ -33,7 +33,7 @@ pub struct Window {
     manager : WindowManagerType,
 
     /// [Window] properties
-    property : WindowProperty,
+    pub(super) property : WindowProperty,
 
     /// Self contained Rc Ref
     refcell : Option<Rc<RefCell<Window>>>,
@@ -153,14 +153,14 @@ impl Window {
     }
 
     /// Get the OS Window manager window handle.
-    pub fn get_window_handle(self) -> Option<*const usize>{
+    pub fn get_window_handle(&self) -> Option<*const usize>{
         self.manager.get_window_handle()
     }
 
     target_cfg! {
         linux => {
             /// Get the OS Window manager display handle.
-            pub fn get_display_handle(self) -> Option<*const usize>{
+            pub fn get_display_handle(&self) -> Option<*const usize>{
                 self.manager.get_display_handle()
             }
         }

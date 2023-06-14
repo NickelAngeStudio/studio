@@ -1,6 +1,4 @@
-//! Linux implementations of [Window].
-
-
+//! Linux implementations of [WindowManager].
 
 use crate::{display::{ desktop::{ event::Event, property::{WindowProperty}, manager::WindowManager}, DisplayError}, error::StudioError};
 use self::{wayland::WaylandWindowManager, x11::X11WindowManager};
@@ -12,46 +10,32 @@ pub mod wayland;
 /// X11 DisplayManager
 pub mod x11;
 
+
+/// Enumeration of implemented [WindowManager]
+enum ImplementedLinuxWindowManager{
+    Wayland(WaylandWindowManager),
+    X11(X11WindowManager)
+}
+
 /// Macro that redirect function to correct window manager. 
 macro_rules! wmfn {
     ($self : ident, $funct : ident ( $($param : tt)* )) => {
-
-        if $self.use_wayland {
-            match &$self.x11 {
-                Some(wm) => wm.$funct($($param)*),
-                None => panic!("Wrong path taken"),
-            }
-        } else {
-            match &$self.wayland {
-                Some(wm) => wm.$funct($($param)*),
-                None => panic!("Wrong path taken"),
-            }
+        match &$self.wm{
+            ImplementedLinuxWindowManager::Wayland(wm) => wm.$funct($($param)*),
+            ImplementedLinuxWindowManager::X11(wm) => wm.$funct($($param)*),
         }
     };
 
     (mut $self : ident, $funct : ident ( $($param : tt)* )) => {
-
-        if $self.use_wayland {
-            match &mut $self.x11 {
-                Some(wm) => wm.$funct($($param)*),
-                None => panic!("Wrong path taken"),
-            }
-        } else {
-            match &mut $self.wayland {
-                Some(wm) => wm.$funct($($param)*),
-                None => panic!("Wrong path taken"),
-            }
+        match &mut $self.wm{
+            ImplementedLinuxWindowManager::Wayland(wm) => wm.$funct($($param)*),
+            ImplementedLinuxWindowManager::X11(wm) => wm.$funct($($param)*),
         }
     };
 }
 
 pub struct LinuxWindowManager {
-
-    use_wayland : bool,
-
-    wayland : Option<WaylandWindowManager>,
-    x11 : Option<X11WindowManager>,
-
+    wm : ImplementedLinuxWindowManager,
 }
 
 impl WindowManager for LinuxWindowManager {
@@ -59,15 +43,11 @@ impl WindowManager for LinuxWindowManager {
         
         if wayland::WaylandWindowManager::is_supported() {
             Ok(LinuxWindowManager{ 
-                wayland: Some(wayland::WaylandWindowManager::new().unwrap()), 
-                x11: Option::None,
-                use_wayland: true,
+                wm : ImplementedLinuxWindowManager::Wayland(wayland::WaylandWindowManager::new().unwrap())
             })
         } else if x11::X11WindowManager::is_supported() {
             Ok(LinuxWindowManager{ 
-                wayland: Option::None, 
-                x11: Some(x11::X11WindowManager::new().unwrap()),
-                use_wayland: false,
+                wm : ImplementedLinuxWindowManager::X11(x11::X11WindowManager::new().unwrap())
             })
         } else {    // No supported display server available
             Err(StudioError::Display(DisplayError::NoDisplayServer))

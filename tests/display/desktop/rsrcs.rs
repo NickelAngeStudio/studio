@@ -1,6 +1,6 @@
 //! Ressources functions and macros to run desktop tests.
 
-use std::{process::exit, time::{Duration, self}, thread};
+use std::{process::exit, time::{Duration, self}, thread, cell::RefCell, rc::Rc};
 
 use cfg_boost::target_cfg;
 use studio::display::desktop::{event::{Event, EventKeyboard}, window::Window};
@@ -37,7 +37,9 @@ pub trait EventReceiver {
 ************/
 /// Loop window and send events to receiver.
 /// Can always be closed using ESC Key.
-pub fn main_loop(window: &mut dyn Window, receiver: &mut dyn EventReceiver){
+pub fn main_loop(window: Rc<RefCell<Window>>, receiver: &mut dyn EventReceiver){
+
+    let mut window = window.borrow_mut();
 
     'main: loop {
           'inner: loop {

@@ -1,5 +1,7 @@
+use std::{rc::Rc, cell::RefCell};
+
 use cfg_boost::target_cfg;
-use studio::display::desktop::{window::Window};
+use studio::display::desktop::{window::Window, property::{WindowPropertySet, KeyboardPropertySet}};
 
 use crate::{display::desktop::{ rsrcs::{main_loop}}, tools::{RESET_CONSOLE, BLUE_CONSOLE}};
 
@@ -11,23 +13,23 @@ target_cfg! {
 }
 
 /// Test keyboard events
-pub fn test_keyboard(window: &mut dyn Window){
+pub fn test_keyboard(window: Rc<RefCell<Window>>){
 
     println!("{}{}{}", BLUE_CONSOLE, "Starting keyboard event tests ...", RESET_CONSOLE);
     
     // Hold spacebar test
-    main_loop(window, &mut hold_space::HoldSpace::new());
+    main_loop(window.clone(), &mut hold_space::HoldSpace::new());
 
     // Different keys test
-    main_loop(window, &mut different_keys::DifferentKeys::new());
+    main_loop(window.clone(), &mut different_keys::DifferentKeys::new());
 
     // Hold different keys
-    main_loop(window, &mut hold_different_keys::HoldDifferentKeys::new());
+    main_loop(window.clone(), &mut hold_different_keys::HoldDifferentKeys::new());
 
     // Auto-repeat
-    window.enable_autorepeat();
-    main_loop(window, &mut auto_repeat_space::AutoRepeatSpace::new());
-    window.disable_autorepeat();
+    window.borrow_mut().set_property(WindowPropertySet::Keyboard(KeyboardPropertySet::EnableAutoRepeat)).expect("");
+    main_loop(window.clone(), &mut auto_repeat_space::AutoRepeatSpace::new());
+    window.borrow_mut().set_property(WindowPropertySet::Keyboard(KeyboardPropertySet::DisableAutoRepeat)).expect("");
     
 
     println!("{}{}{}", BLUE_CONSOLE, "... keyboard event tests ended ...", RESET_CONSOLE);

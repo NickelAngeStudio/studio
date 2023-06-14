@@ -102,6 +102,12 @@ pub(crate) struct X11WindowManager {
     /// Window is minimized
     pub(crate) minimized : bool,
 
+    /// Window has been created.
+    pub(crate) created : bool,
+
+    /// Window has been mapped.
+    pub(crate) mapped : bool,
+
 }
 
 impl WindowManager for X11WindowManager {
@@ -121,12 +127,14 @@ impl WindowManager for X11WindowManager {
                 event_count: 0,
                 auto_repeat: false,
                 pointer_confined: false,
-                pointer_visible: false,
+                pointer_visible: true,
                 position: (0,0),
                 size: (640,480),
                 fullscreen: false,
                 maximized: false,
                 minimized: false,
+                created : false,
+                mapped: false,
             })
         }
         
@@ -159,17 +167,31 @@ impl WindowManager for X11WindowManager {
 
     #[inline(always)]
     fn show(&mut self, property : &WindowProperty) {
-        todo!()
+        if !self.created {  // Create window if not created
+            self.create_window(property);
+        } 
+        
+        if !self.mapped{
+            self.map_window(property);
+        }
     }
 
     #[inline(always)]
     fn close(&mut self) {
-        todo!()
+        unsafe {
+            XDestroyWindow(self.display, self.window);
+            self.created = false;
+            self.mapped = false;
+            self.window = null_mut();   // Delete window pointer.
+        }
     }
 
     #[inline(always)]
     fn hide(&mut self) {
-        todo!()
+        unsafe {
+            XUnmapWindow(self.display, self.window);
+            self.mapped = false;
+        }
     }
 
     #[inline(always)]
@@ -309,6 +331,74 @@ impl WindowManager for X11WindowManager {
 
 
 impl X11WindowManager {
+
+    /// Create the window according to window properties.
+    #[inline(always)]
+    fn create_window(&mut self, property : &WindowProperty){
+        unsafe {
+            // Get root window according to parent.
+            let root = match &property.parent{
+                Some(parent) => parent.borrow().get_window_handle().unwrap() as *mut u64,
+                Option::None => Self::get_x11_default_root_window(self.display),
+            };
+
+            self.window = XCreateSimpleWindow(self.display, root, property.position.0,property.position.1,
+                property.size.0, property.size.1, 0, 0, 0);
+
+            // Set window Type to normal
+            x11_change_property!(self.display, self.window, self.atoms, _NET_WM_WINDOW_TYPE, _NET_WM_WINDOW_TYPE_NORMAL);
+
+            // Set window protocols to capture window closing
+            XSetWMProtocols(self.display, self.window, &mut self.atoms.WM_DELETE_WINDOW, 1);
+
+            // Allowed actions
+            x11_change_property!(self.display, self.window, self.atoms, _NET_WM_ALLOWED_ACTIONS, _NET_WM_ACTION_FULLSCREEN, _NET_WM_ACTION_MINIMIZE, _NET_WM_ACTION_CHANGE_DESKTOP,
+                _NET_WM_ACTION_CLOSE, _NET_WM_ACTION_ABOVE, _NET_WM_ACTION_BELOW);
+
+            match &property.fullscreen{
+                Some(_) => {
+                    // TODO: Set fullscreen according to mode.
+                    // Set as fullscreen
+                    x11_change_property!(self.display, self.window, self.atoms, _NET_WM_STATE, _NET_WM_STATE_MAXIMIZED_HORZ, _NET_WM_STATE_MAXIMIZED_VERT, _NET_WM_STATE_FULLSCREEN);
+                    self.fullscreen = true;
+                },
+                Option::None => self.fullscreen = false,     // No fullscreen mode
+            }
+
+            // Mask of events to receive
+            XSelectInput(self.display, self.window, EVENT_MASK);
+
+            // Flush buffer
+            XFlush(self.display);
+
+            // Set window created flag to true.
+            self.created = true;
+        }
+    }
+
+    /// Map the window according to window properties.
+    #[inline(always)]
+    fn map_window(&mut self, property : &WindowProperty){
+        match &property.parent{
+            Some(parent) => {
+                match property.subwindow_option {
+                    Some(option) => match option{
+                        crate::display::desktop::property::SubWindowOption::Normal =>  unsafe { XMapWindow(self.display, self.window) },
+                        crate::display::desktop::property::SubWindowOption::Top =>  unsafe { XMapRaised(self.display, self.window) },
+                        crate::display::desktop::property::SubWindowOption::Modal => {
+                            unsafe { XMapRaised(self.display, self.window) }
+                            // Lock parent
+                            parent.borrow_mut().property.locked = true;
+                        },
+                    },
+                    Option::None => unsafe { XMapWindow(self.display, self.window) },
+                }
+            },
+            Option::None => unsafe { XMapWindow(self.display, self.window) },
+        }
+
+        self.mapped = true;
+    }
 
     /// Get default root window of display
     fn get_x11_default_root_window(display : *mut X11Handle) -> *mut X11Handle {

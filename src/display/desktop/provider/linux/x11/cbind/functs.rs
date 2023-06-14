@@ -73,6 +73,14 @@ extern {
     pub(crate) fn XMapWindow(x11display : *mut X11Display, w : *mut X11Handle);
 
 
+    /// The XMapWindow() function maps the x11window and all of its subwindows that have had map requests
+    /// and raise the window above others.
+    /// 
+    /// # Reference(s)
+    /// <https://www.x.org/releases/X11R7.7/doc/libX11/libX11/libX11.html#XMapRaised>
+    pub(crate) fn XMapRaised(x11display : *mut X11Display, w : *mut X11Handle);
+
+
     /// The XUnmapWindow function unmaps the specified x11window and causes the X server to generate an UnmapNotify event.
     /// 
     /// # Reference(s)

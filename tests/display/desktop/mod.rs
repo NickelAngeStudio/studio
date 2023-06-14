@@ -1,4 +1,5 @@
 use cfg_boost::target_cfg;
+use studio::display::desktop::window::Window;
 
 // Misc ressources for tests
 pub mod rsrcs;
@@ -20,11 +21,13 @@ target_cfg! {
         #[test]
         #[ignore = "User interaction needed"]
         fn x11_window_tests() {
-            let mut window = crate::assert_ok!(studio::display::desktop::provider::linux::get_x11_window(WINDOW_WIDTH, WINDOW_HEIGHT));
+            //let mut window = crate::assert_ok!(studio::display::desktop::provider::linux::get_x11_window(WINDOW_WIDTH, WINDOW_HEIGHT));
+            let window = Window::new().unwrap();
+            window.borrow_mut().show();
 
             rsrcs::print_instructions_header();
 
-            events::window_events_tests(&mut window);
+            events::window_events_tests(window.clone());
 
             rsrcs::print_instructions_footer();
 
