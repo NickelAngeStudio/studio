@@ -54,7 +54,7 @@ macro_rules! x11_change_property {
 
 /// Static cache to know if X11 is supported
 #[doc(hidden)]
-pub static mut X11Supported : Option<bool> = Option::None;
+pub static mut X11_SUPPORTED : Option<bool> = Option::None;
 
 pub(crate) struct X11WindowManager {
     /// Used to fetch X11 events
@@ -437,7 +437,7 @@ impl X11WindowManager {
     pub fn is_supported() -> bool { 
 
         unsafe {
-            match X11Supported {
+            match X11_SUPPORTED {
                 Some(support) => support,
                 Option::None => {
                     let thread_join_handle = thread::spawn(move || {
@@ -465,12 +465,12 @@ impl X11WindowManager {
             
                     match thread_join_handle.join() {
                         Ok(value) => {
-                            X11Supported = Some(value);
+                            X11_SUPPORTED = Some(value);
                             value
                         },
                         Err(_) => {
                             // Not supported
-                            X11Supported = Some(false);
+                            X11_SUPPORTED = Some(false);
                             false
                         },
                     }
@@ -488,237 +488,3 @@ impl Drop for X11WindowManager {
         }
     }
 }
-/*
-// Contains X11 Window manager
-//pub mod manager;
-
-/// Contains X11 Window implementation
-//pub mod window;
-//pub use window::X11Window as X11Window;
-
-/// Contains X11 Window manager events bind
-//pub(crate) mod event;
-
-/// X11 Window implementation.
-pub(crate) struct X11Window<'window> {
-    /// Used to fetch X11 events
-    pub(crate) x_event : XEvent,    
-
-    /// X11 window properties
-    pub(crate) property : WindowProperty<'window>,
-
-    /// Retained events that will be sent next poll_event 
-    pub(crate) retained_events : Vec<Event>,
-
-    /// C-compatible string for window title
-    wm_title : CString,
-
-    /// Display connection pointer
-    pub(crate) display : *mut X11Display,
-
-    /// Window handle pointer
-    pub(crate) window : *mut X11Handle,
-
-    /// Atoms for handling x11 window properties
-    pub(crate) atoms : X11Atoms,
-
-    /// Count of event to poll
-    pub(crate) event_count : usize,
-}
-
-impl<'window> Window for X11Window<'window> {
-    #[inline(always)]
-    fn new() -> Result<Self, StudioError>  {   // This function is not supported for X11Window
-        todo!()
-    }
-
-    #[inline(always)]
-    fn show(&mut self) -> Result<bool, StudioError> {
-        todo!()
-    }
-
-    #[inline(always)]
-    fn hide(&mut self) {
-        todo!()
-    }
-
-    #[inline(always)]
-    fn close(&mut self) {
-        todo!()
-    }
-
-    #[inline(always)]
-    fn poll_event(&mut self) -> Event {
-        // Get count to poll
-        if self.event_count == 0 {
-            self.sync();
-            self.event_count = self.get_event_count();
-        }
-        self.get_event()
-    }
-
-    #[inline(always)]
-    fn get_provider(&self) -> WindowProvider {
-        WindowProvider::X11
-    }
-
-    #[inline(always)]
-    fn get_properties(&self) -> &WindowProperty {
-        &self.property
-    }
-
-    #[inline(always)]
-    fn set_property(&mut self, property : WindowPropertySet) -> Result<usize, StudioError> {
-        self.set_window_properties(&[property])
-    }
-
-    #[inline(always)]
-    fn set_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, StudioError> {
-        self.set_window_properties(properties)
-    }
-
-    #[inline(always)]
-    fn get_window_handle(&self) -> Option<*const usize> {
-        if self.window != null_mut() {
-            Some(self.window as *const usize)
-        } else {
-            Option::None
-        } 
-    }
-
-    #[inline(always)]
-    fn get_display_handle(&self) -> Option<*const usize> {
-        if self.display != null_mut() {
-            Some(self.display as *const usize)
-        } else {
-            Option::None
-        } 
-    }
-
-    
-
-    
-
-}
-
-impl<'window> X11Window<'window> {
-    fn from(linux_window : &LinuxWindow) -> Result<Self, StudioError>  {   // This function is not supported for X11Window
-        unsafe{
-            let display = XOpenDisplay(std::ptr::null());     // Display connection
-            let mut atoms = X11Atoms::new(display);     // X11 Atoms
-            
-            Ok(X11Window {
-                x_event: XEvent{ _type:0 }, 
-                retained_events: Vec::new(),
-                wm_title: CString::new("").unwrap(), 
-                display,
-                window: null_mut(),
-                atoms,
-                event_count: 0,
-                property: WindowProperty::new(),
-                position: WindowPositionOption::Desktop((0,0)),
-                linux_window,
-            })
-        }
-    }
-
-    /// 
-    pub(crate) fn create_window(&mut self){
-
-    }
-    
-
-    /// Recreate the window.
-    pub(crate) fn recreate_window(&mut self){
-
-    }
-
-    /// Get self properties as mutable
-    pub(crate) fn get_properties_mut(&mut self) -> &mut WindowProperty{
-        &mut self.property
-    }
-
-    /// Get default root window of display
-    fn get_x11_default_root_window(display : *mut X11Handle) -> *mut X11Handle {
-        unsafe {
-            XDefaultRootWindow(display)
-        }
-    }
-
-
-    /// Get the real, translated position of Display.
-    /// 
-    /// Reference(s)
-    /// <https://stackoverflow.com/questions/3806872/window-position-in-xlib>
-    pub fn get_x11_window_position(display : *mut X11Display, window: *mut X11Handle) -> (i32, i32){
-        unsafe {
-            let mut x : c_int = 0;
-            let mut y : c_int = 0;
-            let mut child : X11Handle = 0;
-            
-            XTranslateCoordinates(display, window, 
-                XDefaultRootWindow(display), 0, 0, &mut x, &mut y, &mut child );
-            let xwa = Self::get_x11_window_attributes(display, window);
-            (x - xwa.x, y - xwa.y )
-        }
-    }
-
-    /// Get the XWindowAttributes from display connection and window handle.
-    fn get_x11_window_attributes(display : *mut X11Display, window: *mut X11Handle) -> XWindowAttributes {
-        unsafe {
-            let mut xwa = XWindowAttributes::empty();
-            XGetWindowAttributes( display, window, &mut xwa );
-            xwa
-        }
-    }
-}
-
-/// [Drop] trait implementation for [X11WindowManager].
-impl<'window> Drop for X11Window<'window> {
-    fn drop(&mut self) {
-        unsafe {
-            // Close display server connection.
-            XCloseDisplay(self.display);
-        }
-    }
-}
-
-
-/// Return True if X Window System is supported. False otherwise.
-/// 
-/// Test is done in another thread to prevent main thread panic.
-pub fn is_supported() -> bool {
-    unsafe {
-        let thread_join_handle = thread::spawn(move || {
-            // Try to call C function with error handling.
-            let result = catch_unwind(|| {
-                XOpenDisplay(std::ptr::null())
-            }); 
-
-            match result {
-                Ok(display) => {
-                    if display == std::ptr::null_mut() {
-                        false
-                    } else {
-                        // Disconnect display before returning true
-                        XCloseDisplay(display);
-
-                        true
-                    }
-                },
-
-                // Error occurred, not compatible.
-                Err(_) => false,
-            }
-        });
-
-        match thread_join_handle.join() {
-            Ok(value) => value,
-            Err(_) => {
-                // Not supported
-                false
-            },
-        }
-    }
-}
-*/

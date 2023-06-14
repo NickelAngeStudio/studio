@@ -1,9 +1,5 @@
 //! Window events input such as mouse, keyboard, etc..
 
-use std::{ptr, any::Any};
-
-use super::window::Window;
-
 /// Union of possible events into an enumeration.
 #[derive(Copy, Clone)]
 pub enum Event {
