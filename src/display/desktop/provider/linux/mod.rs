@@ -17,14 +17,35 @@ macro_rules! wmfn {
     ($self : ident, $funct : ident ( $($param : tt)* )) => {
 
         if $self.use_wayland {
-            $self.x11.unwrap().$funct($($param)*)
+            match &$self.x11 {
+                Some(wm) => wm.$funct($($param)*),
+                None => panic!("Wrong path taken"),
+            }
         } else {
-            $self.wayland.unwrap().$funct($($param)*)
+            match &$self.wayland {
+                Some(wm) => wm.$funct($($param)*),
+                None => panic!("Wrong path taken"),
+            }
+        }
+    };
+
+    (mut $self : ident, $funct : ident ( $($param : tt)* )) => {
+
+        if $self.use_wayland {
+            match &mut $self.x11 {
+                Some(wm) => wm.$funct($($param)*),
+                None => panic!("Wrong path taken"),
+            }
+        } else {
+            match &mut $self.wayland {
+                Some(wm) => wm.$funct($($param)*),
+                None => panic!("Wrong path taken"),
+            }
         }
     };
 }
 
-pub(crate) struct LinuxWindowManager {
+pub struct LinuxWindowManager {
 
     use_wayland : bool,
 
@@ -61,97 +82,96 @@ impl WindowManager for LinuxWindowManager {
 
     #[inline(always)]
     fn poll_event(&mut self) -> Event  {
-         wmfn!(self, poll_event())
+        wmfn!(mut self, poll_event())
+    }
+
+    fn push_event(&mut self, event: Event){
+        wmfn!(mut self, push_event(event))
     }
 
     #[inline(always)]
     fn show(&mut self, property : &WindowProperty) {
-        wmfn!(self, show(property))
-    }
-
-    #[inline(always)]
-    fn restore(&mut self) {
-         wmfn!(self, restore());
+        wmfn!(mut self, show(property))
     }
 
     #[inline(always)]
     fn close(&mut self) {
-         wmfn!(self, close());
+         wmfn!(mut self, close());
     }
 
     #[inline(always)]
     fn hide(&mut self) {
-         wmfn!(self, hide());
+         wmfn!(mut self, hide());
     }
 
     #[inline(always)]
     fn set_title(&mut self, title : &String) -> bool {
-         wmfn!(self, set_title(title))
+         wmfn!(mut self, set_title(title))
     }
 
     #[inline(always)]
     fn set_position(&mut self, position : (i32,i32)) -> bool {
-         wmfn!(self, set_position(position))
+         wmfn!(mut self, set_position(position))
     }
 
     #[inline(always)]
     fn set_size(&mut self, size : &(u32,u32)) -> bool {
-         wmfn!(self, set_size(size))
+         wmfn!(mut self, set_size(size))
     }
 
     #[inline(always)]
     fn show_decoration(&mut self) -> bool {
-         wmfn!(self, show_decoration())
+         wmfn!(mut self, show_decoration())
     }
 
     #[inline(always)]
     fn hide_decoration(&mut self) -> bool {
-         wmfn!(self, hide_decoration())
+         wmfn!(mut self, hide_decoration())
     }
 
     #[inline(always)]
     fn minimize(&mut self) -> bool {
-         wmfn!(self, minimize())
+         wmfn!(mut self, minimize())
     }
 
     #[inline(always)]
     fn maximize(&mut self) -> bool {
-         wmfn!(self, maximize())
+         wmfn!(mut self, maximize())
     }
 
     #[inline(always)]
     fn enable_autorepeat(&mut self) -> bool {
-         wmfn!(self, enable_autorepeat())
+         wmfn!(mut self, enable_autorepeat())
     }
 
     #[inline(always)]
     fn disable_autorepeat(&mut self) -> bool {
-         wmfn!(self, disable_autorepeat())
+         wmfn!(mut self, disable_autorepeat())
     }
 
     #[inline(always)]
     fn set_pointer_position(&mut self, position : &(i32, i32)) -> bool {
-         wmfn!(self, set_pointer_position(position))
+         wmfn!(mut self, set_pointer_position(position))
     }
 
     #[inline(always)]
     fn show_pointer(&mut self) -> bool {
-         wmfn!(self, show_pointer())
+         wmfn!(mut self, show_pointer())
     }
 
     #[inline(always)]
     fn hide_pointer(&mut self) -> bool {
-         wmfn!(self, hide_pointer())
+         wmfn!(mut self, hide_pointer())
     }
 
     #[inline(always)]
     fn confine_pointer(&mut self) -> bool {
-         wmfn!(self, confine_pointer())
+         wmfn!(mut self, confine_pointer())
     }
 
     #[inline(always)]
     fn release_pointer(&mut self) -> bool {
-         wmfn!(self, release_pointer())
+         wmfn!(mut self, release_pointer())
     }
 
     #[inline(always)]

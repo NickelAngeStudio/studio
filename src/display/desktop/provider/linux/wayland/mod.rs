@@ -1,8 +1,8 @@
-use crate::{display::desktop::{manager::WindowManager, provider::WindowProvider}, error::StudioError};
+use crate::{display::desktop::{manager::WindowManager, provider::WindowProvider, event::Event}, error::StudioError};
 
 /// Static cache to know if wayland is supported
 #[doc(hidden)]
-pub static WaylandSupported : Option<bool> = None;
+pub static mut WaylandSupported : Option<bool> = None;
 
 pub(crate) struct WaylandWindowManager{
 
@@ -10,7 +10,7 @@ pub(crate) struct WaylandWindowManager{
 
 impl WaylandWindowManager {
     pub fn is_supported() -> bool { 
-        match WaylandSupported {
+        match unsafe { WaylandSupported } {
             Some(supported) => supported,
             None => {
                 unsafe {
@@ -39,12 +39,12 @@ impl WindowManager for WaylandWindowManager {
     }
 
     #[inline(always)]
-    fn show(&mut self, property : &crate::display::desktop::property::WindowProperty) {
+    fn push_event(&mut self, retain: Event){
         todo!()
     }
 
     #[inline(always)]
-    fn restore(&mut self) {
+    fn show(&mut self, property : &crate::display::desktop::property::WindowProperty) {
         todo!()
     }
 

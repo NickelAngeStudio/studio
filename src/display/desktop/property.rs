@@ -1,9 +1,7 @@
-use std::{cell::RefCell, rc::Rc, usize::MAX};
+use std::{cell::{RefCell}, rc::Rc};
 
 use crate::error::StudioError;
-
-use super::{screen::Screen, window::{WindowType, Window}};
-use cfg_boost::{target_cfg, meta_cfg};
+use super::{screen::Screen, window::Window };
 
  /// Minimum [Window] width allowed.
 pub const WINDOW_MIN_WIDTH : u32 = 1;
@@ -24,10 +22,8 @@ pub const DEFAULT_WIDTH : u32 = 640;
 pub const DEFAULT_HEIGHT : u32 = 480;
 
 /// [Window] fullscreen mode enumeration.
+#[derive(Clone)]
 pub enum FullScreenMode {
-
-    /// Window isn't fullscreen
-    None,
 
     /// Window will be set fullscreen in the current screen this window belong to.
     Current,
@@ -59,55 +55,6 @@ pub enum WindowPositionOption {
 
     /// Position window in the center of parent window. If no parent, will be at desktop 0,0.
     CenterParent,
-}
-
-impl WindowPositionOption {
-
-    /// Get an absolute (x,y) position from a relative position option of a given window.
-    /// 
-    /// Return Ok(position) on success, DisplayError::PositionNoParent on failure.
-    pub fn get_absolute_position_from_relative(window : &WindowType, option : &WindowPositionOption) -> Result<(i32, i32), StudioError> {
-
-        match option {
-            // Desktop position is already an absolute.
-            WindowPositionOption::Desktop(position) => Ok(*position),
-
-            // Add screen offset to position
-            WindowPositionOption::Screen(screen, position) =>
-                Ok((screen.get_extended_position().0 + position.0, screen.get_extended_position().1 + position.1)),
-
-            // Add parent position. Will raise error if no parent.
-            WindowPositionOption::Parent(position) => {
-                match &window.get_properties().parent {  // Verify if parent, then raise error if None.
-                    Some(parent) => {
-                        let parent_pos = parent.get_properties().position;
-                        Ok((parent_pos.0 + position.0, parent_pos.1 + position.1))
-                    },
-                    None => Err(StudioError::Display(crate::display::DisplayError::PositionNoParent)),
-                }
-            },
-
-            WindowPositionOption::CenterScreen(screen) => {
-                let screen_pos = screen.get_extended_position();
-                let screen_size = screen.get_current_resolution();
-                let size = window.get_properties().size;
-
-                Ok((screen_pos.0 + ((screen_size.0 - size.0) / 2) as i32, screen_pos.1 + ((screen_size.1 - size.1) / 2) as i32))
-            },
-
-
-            WindowPositionOption::CenterParent => match &window.get_properties().parent {  // Verify if parent, then raise error if None.
-                    Some(parent) => {
-                        let parent_pos = parent.get_properties().position;
-                        let parent_size =  parent.get_properties().size;
-                        let size = window.get_properties().size;
-
-                        Ok((parent_pos.0 + ((parent_size.0 - size.0) / 2) as i32, parent_pos.1 + ((parent_size.1 - size.1) / 2) as i32))
-                    },
-                    None => Err(StudioError::Display(crate::display::DisplayError::PositionNoParent)),
-                },
-        }
-    }
 }
 
 /// Contains keyboard properties that can be set.
@@ -160,7 +107,7 @@ pub enum PointerMode {
 
 /// Enumeration of possible sub window display options.
 #[derive(Clone, Copy)]
-pub(crate) enum SubWindowOption {
+pub enum SubWindowOption {
 
     /// Child is showed as normal window.
     Normal,
@@ -180,7 +127,7 @@ pub enum WindowPropertySet {
     /// When closing a parent, all sub window must also be closed.
     /// 
     /// Note : A window cannot be it's own parent nor can it become the subwindow of his subwindows.
-    SetParent(WindowType, SubWindowOption),
+    SetParent(Rc<RefCell<Window>>, SubWindowOption),
 
     /// Remove window from parent, making it a parentless window.
     RemoveParent,
@@ -209,12 +156,14 @@ pub enum WindowPropertySet {
     /// Set window fullscreen mode
     Fullscreen(FullScreenMode),
 
+    /// Restore the window, removing minimize, maximize and fullscreen.
+    Restore,
+
     /// Set keyboard property
     Keyboard(KeyboardPropertySet),
 
     /// Set window pointer properties.
     Pointer(PointerPropertySet),
-
 }   
 
 
@@ -228,11 +177,10 @@ pub struct WindowProperty {
     pub keyboard : KeyboardProperty,
 
     /// Parent window reference cell (if any)
-    //pub parent : Option<Rc<RefCell<WindowType>>>,
-    pub parent : Option<WindowType>,
+    pub parent : Option<Rc<RefCell<Window>>>,
 
     /// Subwindow array
-    pub subs : Vec<WindowType>,
+    pub subs : Vec<Rc<RefCell<Window>>>,
 
     /// Subwindow option for this window.
     pub subwindow_option : Option<SubWindowOption>,
@@ -262,13 +210,13 @@ pub struct WindowProperty {
     pub maximized : bool,
 
     /// Window is fullscreen
-    pub fullscreen : bool,
+    pub fullscreen : Option<FullScreenMode>,
 
     /// Window is visible.
     pub visible: bool,
 
-    /// Window is closed.
-    pub closed: bool,
+    /// Window is created.
+    pub created: bool,
 
     /// Window is locked. Usually by showing a modal window.
     pub locked:bool,
@@ -286,11 +234,11 @@ impl WindowProperty{
             center: (DEFAULT_WIDTH as i32 / 2, DEFAULT_HEIGHT as i32 / 2), 
             minimized: false, 
             maximized: false, 
-            fullscreen: false,
+            fullscreen: Option::None,
             pointer: PointerProperty::new(),
             keyboard: KeyboardProperty::new(),
             visible: false,
-            closed: true,
+            created: false,
             decoration: true,
             parent: None,
             subs: Vec::new(),
@@ -299,11 +247,12 @@ impl WindowProperty{
             subwindow_option: None, 
         }
     }
+ 
 
     /// Add a sub window.
     /// 
     /// Returns Ok(true) on success or Err(StudioError) if already added or owned.
-    pub(crate) fn add_sub(& mut self, sub: & WindowType){
+    pub(crate) fn add_sub(&mut self, sub: Rc<RefCell<Window>>){
 
         // usize::MAX means subwindow was not found.
         if self.get_sub_index(sub.clone()) == usize::MAX {
@@ -315,7 +264,7 @@ impl WindowProperty{
     /// Remove a subwindow from the subwindow array.
     /// 
     /// Returns index as usize of deleted.
-    pub(crate) fn remove_sub(&mut self, sub: & WindowType)-> usize {
+    pub(crate) fn remove_sub(&mut self, sub: Rc<RefCell<Window>>)-> usize {
 
         let index = self.get_sub_index(sub);
 
@@ -330,10 +279,10 @@ impl WindowProperty{
     /// Get index of subwindow in array.
     /// 
     /// Returns Ok(index) on success, usize::MAX on failure.
-    fn get_sub_index(&mut self, sub: & WindowType) -> usize {
+    fn get_sub_index(&self, sub: Rc<RefCell<Window>>) -> usize {
         for i in 0..self.subs.len() {
             match self.subs.get(i){
-                Some(sw) => if *sw as *const _ == sub as * const _ {
+                Some(sw) => if Rc::ptr_eq(sw, &sub) {
                     return i
                 },
                 None => {},
@@ -343,7 +292,51 @@ impl WindowProperty{
         usize::MAX
     }
 
-    
+    /// Get an absolute (x,y) position from a relative position option of a given window.
+    /// 
+    /// Return Ok(position) on success, DisplayError::PositionNoParent on failure.
+    pub fn get_absolute_position_from_relative(&self, option : &WindowPositionOption) -> Result<(i32, i32), StudioError> {
+
+        match option {
+            // Desktop position is already an absolute.
+            WindowPositionOption::Desktop(position) => Ok(*position),
+
+            // Add screen offset to position
+            WindowPositionOption::Screen(screen, position) =>
+                Ok((screen.get_extended_position().0 + position.0, screen.get_extended_position().1 + position.1)),
+
+            // Add parent position. Will raise error if no parent.
+            WindowPositionOption::Parent(position) => {
+                match &self.parent {  // Verify if parent, then raise error if None.
+                    Some(parent) => {
+                        let parent_pos = parent.borrow().get_properties().position;
+                        Ok((parent_pos.0 + position.0, parent_pos.1 + position.1))
+                    },
+                    None => Err(StudioError::Display(crate::display::DisplayError::PositionNoParent)),
+                }
+            },
+
+            WindowPositionOption::CenterScreen(screen) => {
+                let screen_pos = screen.get_extended_position();
+                let screen_size = screen.get_current_resolution();
+                let size = self.size;
+
+                Ok((screen_pos.0 + ((screen_size.0 - size.0) / 2) as i32, screen_pos.1 + ((screen_size.1 - size.1) / 2) as i32))
+            },
+
+
+            WindowPositionOption::CenterParent => match &self.parent {  // Verify if parent, then raise error if None.
+                    Some(parent) => {
+                        let parent_pos =parent.borrow().get_properties().position;
+                        let parent_size =  parent.borrow().get_properties().size;
+                        let size = self.size;
+
+                        Ok((parent_pos.0 + ((parent_size.0 - size.0) / 2) as i32, parent_pos.1 + ((parent_size.1 - size.1) / 2) as i32))
+                    },
+                    None => Err(StudioError::Display(crate::display::DisplayError::PositionNoParent)),
+                },
+        }
+    }
 
     /// Returns true if size if within MIN and MAX.
     pub fn is_size_within_boundaries(size : &(u32, u32)) -> bool {

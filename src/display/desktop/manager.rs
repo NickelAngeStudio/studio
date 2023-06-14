@@ -21,9 +21,6 @@ pub trait WindowManager {
     /// Show the window according to [WindowProperty]
     fn show(&mut self, property : &WindowProperty);
 
-    /// Restore window to previous state.
-    fn restore(&mut self);
-
     /// Force close the window.
     fn close(&mut self);
 
@@ -32,6 +29,9 @@ pub trait WindowManager {
 
     /// Get the OS Window manager window handle.
     fn get_window_handle(&self) -> Option<*const usize>;
+
+    /// Push an event that will be poll during poll_event.
+    fn push_event(&mut self, event: Event);
 
     target_cfg! {
         linux => {

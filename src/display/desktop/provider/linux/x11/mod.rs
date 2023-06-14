@@ -54,7 +54,7 @@ macro_rules! x11_change_property {
 
 /// Static cache to know if X11 is supported
 #[doc(hidden)]
-pub static X11Supported : Option<bool> = Option::None;
+pub static mut X11Supported : Option<bool> = Option::None;
 
 pub(crate) struct X11WindowManager {
     /// Used to fetch X11 events
@@ -109,7 +109,7 @@ impl WindowManager for X11WindowManager {
 
         unsafe{
             let display = XOpenDisplay(std::ptr::null());      // Display connection
-            let mut atoms = X11Atoms::new(display);                         // X11 Atoms
+            let atoms = X11Atoms::new(display);                         // X11 Atoms
             
             Ok(X11WindowManager {
                 x_event: XEvent{ _type:0 }, 
@@ -139,21 +139,26 @@ impl WindowManager for X11WindowManager {
 
     #[inline(always)]
     fn poll_event(&mut self) -> Event  {
-        // Get count to poll
-        if self.event_count == 0 {
-            self.sync();
-            self.event_count = self.get_event_count();
+
+        if self.retained_events.len() > 0 { // Pop event from retained
+            self.retained_events.pop().unwrap() 
+        } else {
+            // Get count to poll
+            if self.event_count == 0 {
+                self.sync();
+                self.event_count = self.get_event_count();
+            }
+            self.get_event()
         }
-        self.get_event()
+        
+    }
+
+    fn push_event(&mut self, retain: Event){
+        self.retained_events.push(retain);
     }
 
     #[inline(always)]
     fn show(&mut self, property : &WindowProperty) {
-        todo!()
-    }
-
-    #[inline(always)]
-    fn restore(&mut self) {
         todo!()
     }
 
@@ -341,10 +346,10 @@ impl X11WindowManager {
 
     pub fn is_supported() -> bool { 
 
-        match X11Supported {
-            Some(support) => support,
-            Option::None => {
-                unsafe {
+        unsafe {
+            match X11Supported {
+                Some(support) => support,
+                Option::None => {
                     let thread_join_handle = thread::spawn(move || {
                         // Try to call C function with error handling.
                         let result = catch_unwind(|| {
@@ -379,10 +384,10 @@ impl X11WindowManager {
                             false
                         },
                     }
-                }
-            },
-        }        
-     }
+                },
+            }        
+        }
+    }
 }
 
 impl Drop for X11WindowManager {
