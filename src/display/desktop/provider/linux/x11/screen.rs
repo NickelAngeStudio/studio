@@ -1,6 +1,5 @@
-//use crate::{kleio::display::screen::{Screen, ScreenResolution, ScreenList}, error::{StudioError, DisplayError}};
-
-use crate::{error::StudioError, display::error::DisplayError, display::desktop::screen::{ScreenResolution, ScreenList, Screen}};
+use crate::{error::StudioError, display::desktop::screen::{ScreenResolution, ScreenList, Screen}};
+use crate::display::DisplayError;
 
 /// Get screen list in ScreenList
 pub(crate) fn get_x11_screen_list() -> Result<ScreenList, StudioError> {

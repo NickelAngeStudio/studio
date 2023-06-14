@@ -1,11 +1,11 @@
 //! Ressources functions and macros to run desktop tests.
 
-use std::{process::exit, time::{Duration, self}, thread};
+use std::{process::exit, time::{Duration, self}, thread, cell::RefCell, rc::Rc};
 
 use cfg_boost::target_cfg;
 use studio::display::desktop::{event::{Event, EventKeyboard}, window::Window};
 
-use crate::tools::{CYAN_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE, YELLOW_CONSOLE};
+use crate::tools::{CYAN_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE, YELLOW_CONSOLE, MAGENTA_CONSOLE};
 
 /************
 * CONSTANTS * 
@@ -25,14 +25,8 @@ target_cfg! {
 *********/
 /// Event receiver to send events to.
 pub trait EventReceiver {
-    /// Called before receiving events
-    fn before_receive(&mut self);
-
     /// Receive an event
     fn receive(&mut self, event: Event);
-
-    /// Called after receiving events
-    fn after_receive(&mut self);
 
     /// Returning true will break the main loop.
     fn is_test_finished(&self) -> bool;
@@ -43,15 +37,20 @@ pub trait EventReceiver {
 ************/
 /// Loop window and send events to receiver.
 /// Can always be closed using ESC Key.
-pub fn main_loop(window: &mut dyn Window, receiver: &mut dyn EventReceiver){
+pub fn main_loop(window: Rc<RefCell<Window>>, receiver: &mut dyn EventReceiver){
+
+    let mut window = window.borrow_mut();
 
     'main: loop {
-        receiver.before_receive();
-        'inner: loop {
+          'inner: loop {
             let event = window.poll_event();
 
             // Send event to receiver.
             receiver.receive(event);
+
+            if receiver.is_test_finished() {
+                break 'main;
+            }
 
             match event {
                 Event::Keyboard(kb_event) => match kb_event {
@@ -72,7 +71,6 @@ pub fn main_loop(window: &mut dyn Window, receiver: &mut dyn EventReceiver){
         if receiver.is_test_finished() {
             break 'main;
         }
-        receiver.after_receive();
         thread::sleep(WAIT_MS);
     }
 
@@ -90,6 +88,7 @@ pub fn print_instructions_header() {
     print!("{}{}{}", YELLOW_CONSOLE, "YELLOW", RESET_CONSOLE);
     print!("{}{}{}", CYAN_CONSOLE, ".\n", RESET_CONSOLE);
     println!("{}{}{}", CYAN_CONSOLE, "3. Press ESC to exit and fail any test.", RESET_CONSOLE);
+    println!("{}{}{}", MAGENTA_CONSOLE, "4. Important informations are in MAGENTA.", RESET_CONSOLE);
 
     println!("{}{}**{}", BLUE_CONSOLE, "\n*************", RESET_CONSOLE);
     println!("{}* {} *{}", BLUE_CONSOLE, "TESTS START", RESET_CONSOLE);
@@ -103,4 +102,7 @@ pub fn print_instructions_footer() {
     println!("{}{}**{}", BLUE_CONSOLE, "\n***********", RESET_CONSOLE);
     println!("{}* {} *{}", BLUE_CONSOLE, "TESTS END", RESET_CONSOLE);
     println!("{}**{}**{}", BLUE_CONSOLE, "*********", RESET_CONSOLE);
+
+    println!("{}{}{}", MAGENTA_CONSOLE, "Tests finished, focus console and press ENTER to close.", RESET_CONSOLE);
+    std::io::stdin().read_line(&mut String::new()).unwrap();
 }

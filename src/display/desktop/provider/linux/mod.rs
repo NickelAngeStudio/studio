@@ -1,18 +1,494 @@
-//! Linux implementations of [Window].
+//! Linux implementations of [WindowManager].
 
-use crate::{display::{ error::DisplayError, desktop::window::Window}, error::StudioError};
-use super::super::screen::ScreenList;
-
+use crate::{display::{ desktop::{ event::Event, property::{WindowProperty}, manager::WindowManager}, DisplayError}, error::StudioError};
+use self::{wayland::WaylandWindowManager, x11::X11WindowManager};
 use super::WindowProvider;
 
-
 /// Wayland DisplayManager
-//pub mod wayland;
+pub mod wayland;
 
 /// X11 DisplayManager
 pub mod x11;
 
 
+/// Enumeration of implemented [WindowManager]
+enum ImplementedLinuxWindowManager{
+    Wayland(WaylandWindowManager),
+    X11(X11WindowManager)
+}
+
+/// Macro that redirect function to correct window manager. 
+macro_rules! wmfn {
+    ($self : ident, $funct : ident ( $($param : tt)* )) => {
+        match &$self.wm{
+            ImplementedLinuxWindowManager::Wayland(wm) => wm.$funct($($param)*),
+            ImplementedLinuxWindowManager::X11(wm) => wm.$funct($($param)*),
+        }
+    };
+
+    (mut $self : ident, $funct : ident ( $($param : tt)* )) => {
+        match &mut $self.wm{
+            ImplementedLinuxWindowManager::Wayland(wm) => wm.$funct($($param)*),
+            ImplementedLinuxWindowManager::X11(wm) => wm.$funct($($param)*),
+        }
+    };
+}
+
+pub struct LinuxWindowManager {
+    wm : ImplementedLinuxWindowManager,
+}
+
+impl WindowManager for LinuxWindowManager {
+    fn new() -> Result<Self, StudioError> where Self : Sized {
+        
+        if wayland::WaylandWindowManager::is_supported() {
+            Ok(LinuxWindowManager{ 
+                wm : ImplementedLinuxWindowManager::Wayland(wayland::WaylandWindowManager::new().unwrap())
+            })
+        } else if x11::X11WindowManager::is_supported() {
+            Ok(LinuxWindowManager{ 
+                wm : ImplementedLinuxWindowManager::X11(x11::X11WindowManager::new().unwrap())
+            })
+        } else {    // No supported display server available
+            Err(StudioError::Display(DisplayError::NoDisplayServer))
+        }
+
+    }
+
+    #[inline(always)]
+    fn get_window_provider(&self) -> WindowProvider {
+        wmfn!(self, get_window_provider())
+    }
+
+    #[inline(always)]
+    fn poll_event(&mut self) -> Event  {
+        wmfn!(mut self, poll_event())
+    }
+
+    fn push_event(&mut self, event: Event){
+        wmfn!(mut self, push_event(event))
+    }
+
+    #[inline(always)]
+    fn show(&mut self, property : &WindowProperty) {
+        wmfn!(mut self, show(property))
+    }
+
+    #[inline(always)]
+    fn close(&mut self) {
+         wmfn!(mut self, close());
+    }
+
+    #[inline(always)]
+    fn hide(&mut self) {
+         wmfn!(mut self, hide());
+    }
+
+    #[inline(always)]
+    fn set_title(&mut self, title : &String) -> bool {
+         wmfn!(mut self, set_title(title))
+    }
+
+    #[inline(always)]
+    fn set_position(&mut self, position : (i32,i32)) -> bool {
+         wmfn!(mut self, set_position(position))
+    }
+
+    #[inline(always)]
+    fn set_size(&mut self, size : &(u32,u32)) -> bool {
+         wmfn!(mut self, set_size(size))
+    }
+
+    #[inline(always)]
+    fn show_decoration(&mut self) -> bool {
+         wmfn!(mut self, show_decoration())
+    }
+
+    #[inline(always)]
+    fn hide_decoration(&mut self) -> bool {
+         wmfn!(mut self, hide_decoration())
+    }
+
+    #[inline(always)]
+    fn minimize(&mut self) -> bool {
+         wmfn!(mut self, minimize())
+    }
+
+    #[inline(always)]
+    fn maximize(&mut self) -> bool {
+         wmfn!(mut self, maximize())
+    }
+
+    #[inline(always)]
+    fn enable_autorepeat(&mut self) -> bool {
+         wmfn!(mut self, enable_autorepeat())
+    }
+
+    #[inline(always)]
+    fn disable_autorepeat(&mut self) -> bool {
+         wmfn!(mut self, disable_autorepeat())
+    }
+
+    #[inline(always)]
+    fn set_pointer_position(&mut self, position : &(i32, i32)) -> bool {
+         wmfn!(mut self, set_pointer_position(position))
+    }
+
+    #[inline(always)]
+    fn show_pointer(&mut self) -> bool {
+         wmfn!(mut self, show_pointer())
+    }
+
+    #[inline(always)]
+    fn hide_pointer(&mut self) -> bool {
+         wmfn!(mut self, hide_pointer())
+    }
+
+    #[inline(always)]
+    fn confine_pointer(&mut self) -> bool {
+         wmfn!(mut self, confine_pointer())
+    }
+
+    #[inline(always)]
+    fn release_pointer(&mut self) -> bool {
+         wmfn!(mut self, release_pointer())
+    }
+
+    #[inline(always)]
+    fn get_window_handle(&self) -> Option<*const usize> {
+        wmfn!(self, get_window_handle())
+    }  
+
+    #[inline(always)]
+    fn get_display_handle(&self) -> Option<*const usize> {
+        wmfn!(self, get_display_handle())
+    }
+
+}
+
+
+
+/*
+/// Linux implementation of a window.
+pub(crate) struct LinuxWindow<'window> {
+
+    use_wayland : bool,
+    
+    wayland : Option<X11Window<'window>>,
+    x11 : Option<X11Window<'window>>,
+
+}
+
+impl<'window> LinuxWindow<'window> {
+    pub(crate) fn get_properties_mut(&mut self) -> &mut WindowProperty{
+         wmfn!(self, get_properties_mut()
+    }
+}
+
+impl<'window> Window for LinuxWindow<'window> {
+
+    fn new() -> Result<Self, StudioError> {
+
+        let mut linux_window = LinuxWindow{ use_wayland: false, wayland: None, x11: None };
+        
+        match unsafe { DefaultLinuxWindowProvider } {
+            Some(provider) => {
+                match provider{
+                    WindowProvider::Wayland => todo!(),
+                    WindowProvider::X11 => todo!(),
+                    _ => Err(StudioError::Display(DisplayError::NotSupported)),
+                }
+            },
+            None => {
+                // TODO: Verify is Wayland is supported, if not, fall back to X11.
+                unsafe { DefaultLinuxWindowProvider = Some(WindowProvider::X11) };
+                
+                match X11Window::new(){
+                    Ok(mut x11win) => {
+                        Ok(linux_window)
+                    },
+                    Err(err) => Err(err),
+                }
+            },
+        }
+    }
+
+    fn show(&mut self) -> Result<bool, StudioError> {
+         wmfn!(self, show()
+    }
+
+    fn hide(&mut self) {
+         wmfn!(self, hide();
+    }
+
+    fn close(&mut self) {
+         wmfn!(self, close();
+    }
+
+    fn poll_event(&mut self) -> Event {
+         wmfn!(self, poll_event()
+    }
+
+    fn get_provider(&self) -> WindowProvider {
+         wmfn!(self, get_provider()
+    }
+
+    fn get_properties(&self) -> &WindowProperty {
+         wmfn!(self, get_properties()
+    }
+
+    fn set_property(&mut self, property : WindowPropertySet) -> Result<usize, StudioError> {
+         wmfn!(self, set_property(property)
+    }
+
+    fn set_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, StudioError> {
+         wmfn!(self, set_properties(properties)
+    }
+
+    fn get_window_handle(&self) -> Option<*const usize> {
+         wmfn!(self, get_window_handle()
+    }
+
+    fn get_display_handle(&self) -> Option<*const usize> {
+         wmfn!(self, get_display_handle()
+    }
+
+    
+
+    
+
+}
+*/
+/*
+/// Redirect call to the correct window manager
+macro_rules! linux_wm {
+    ($self:ident) => {
+        unsafe {
+            match DefaultLinuxWindowProvider{
+                Some(provider) => match provider {
+                    WindowProvider::Wayland => todo!(),
+                    WindowProvider::X11 => $self.x11manager.unwrap(),
+                    _ => { panic!("Provider not compatible!") }
+                },
+                None => panic!("Linux Provider not specified!"),
+            }
+        }
+    };
+}
+
+
+/// Linux [WindowManager] managing Wayland and X11 calls.
+pub(crate) struct LinuxWindowManager {
+    x11manager : Option<X11WindowManager>,
+}
+
+impl LinuxWindowManager {
+   
+    pub fn from_provider(provider: WindowProvider) -> Result<LinuxWindowManager, StudioError> {
+        match provider {
+            WindowProvider::Wayland => todo!(),
+            WindowProvider::X11 => match X11WindowManager::new() {
+                Ok(manager) => {
+                    Ok(LinuxWindowManager { x11manager: Some(manager) })
+                },
+                Err(err) => Err(err),
+            },
+            _ => Err(StudioError::Display(DisplayError::NotSupported)),
+        }
+
+    }
+}
+
+impl<'window> WindowManager<'window> for LinuxWindowManager {
+    /// Create a new LinuxWindowManager according to DefaultLinuxWindowProvider.
+    /// If DefaultLinuxWindowProvider is None, will try to see if Wayland is compatible
+    /// then fallback to X11. 
+    fn new() -> Result<Self, StudioError> {
+        match DefaultLinuxWindowProvider {
+            Some(provider) => LinuxWindowManager::from_provider(provider),
+            None => {
+                // TODO:Test if wayland compatible then fallback to X11 if not
+                DefaultLinuxWindowProvider = Some(WindowProvider::X11);
+                LinuxWindowManager::new()
+            },
+        }
+    }
+
+    #[inline(always)]
+    fn get_window_provider(&self) -> WindowProvider {
+        linux_wm!(self).get_window_provider()
+    }
+
+    #[inline(always)]
+    fn poll_event(&mut self) -> Event  {
+        linux_wm!(self).poll_event()
+    }
+
+    #[inline(always)]
+    fn send_event(&mut self, event : Event) {
+        linux_wm!(self).send_event(event);
+    }
+
+    #[inline(always)]
+    fn show(&mut self, parameters : WindowManagerParameter) {
+        linux_wm!(self).show(parameters);
+    }
+
+    #[inline(always)]
+    fn show_child(&mut self, parent : &dyn WindowManager, parameters : WindowManagerParameter, option : WindowChildDisplayOption) {
+        linux_wm!(self).show_child(parent, parameters, option);
+    }
+
+    #[inline(always)]
+    fn restore(&mut self)  {
+        linux_wm!(self).restore();
+    }
+
+    #[inline(always)]
+    fn close(&mut self) {
+        linux_wm!(self).close();
+    }
+
+    #[inline(always)]
+    fn hide(&mut self) {
+        linux_wm!(self).hide();
+    }
+
+    #[inline(always)]
+    fn get_screen_list(&self) -> Result<&ScreenList, StudioError> {
+
+        // Cache screen list.
+        match &LinuxScreenList {
+            Some(screens) => {
+                Ok(&screens)
+            },
+            None => {
+                match linux_wm!(self).get_screen_list(){
+                    Ok(screens) => {
+                        LinuxScreenList = Some(*screens);
+                        Ok(screens)
+                    },
+                    Err(err) => Err(err),
+                }
+            } 
+        }
+    }
+
+    #[inline(always)]
+    fn show_decoration(&mut self) {
+        linux_wm!(self).show_decoration();
+    }
+
+    #[inline(always)]
+    fn hide_decoration(&mut self) {
+        linux_wm!(self).hide_decoration();
+    }
+
+    #[inline(always)]
+    fn set_title(&mut self, title:&str) {
+        linux_wm!(self).set_title(title);
+    }
+
+    #[inline(always)]
+    fn set_size(&mut self, size : (u32, u32)) {
+        linux_wm!(self).set_size(size);
+    }
+
+    #[inline(always)]
+    fn set_position(&mut self, position : (i32,i32)) {
+        linux_wm!(self).set_position(position);
+    }
+
+    #[inline(always)]
+    fn set_pointer_position(&mut self, position : (i32,i32)) {
+        linux_wm!(self).set_pointer_position(position);
+    }
+
+    #[inline(always)]
+    fn hide_pointer(&mut self) {
+        linux_wm!(self).hide_pointer();
+    }
+
+    #[inline(always)]
+    fn show_pointer(&mut self) {
+        linux_wm!(self).show_pointer();
+    }
+
+    #[inline(always)]
+    fn confine_pointer(&mut self) {
+        linux_wm!(self).confine_pointer();
+    }
+
+    #[inline(always)]
+    fn release_pointer(&mut self) {
+        linux_wm!(self).release_pointer();
+    }
+
+    #[inline(always)]
+    fn enable_autorepeat(&mut self) {
+        linux_wm!(self).enable_autorepeat();
+    }
+
+    #[inline(always)]
+    fn disable_autorepeat(&mut self) {
+        linux_wm!(self).disable_autorepeat();
+    }
+
+    #[inline(always)]
+    fn get_left_button_index(&self) -> u32 {
+        linux_wm!(self).get_left_button_index()
+    }
+
+    #[inline(always)]
+    fn get_right_button_index(&self) -> u32 {
+        linux_wm!(self).get_right_button_index()
+    }
+
+    #[inline(always)]
+    fn get_middle_button_index(&self) -> u32 {
+        linux_wm!(self).get_middle_button_index()
+    }
+
+    #[inline(always)]
+    fn get_next_button_index(&self) -> u32 {
+        linux_wm!(self).get_next_button_index()
+    }
+
+    #[inline(always)]
+    fn get_previous_button_index(&self) -> u32 {
+        linux_wm!(self).get_previous_button_index()
+    }
+
+    #[inline(always)]
+    fn get_scroll_up_index(&self) -> u32 {
+        linux_wm!(self).get_scroll_up_index()
+    }
+
+    #[inline(always)]
+    fn get_scroll_down_index(&self) -> u32 {
+        linux_wm!(self).get_scroll_down_index()
+    }
+
+    #[inline(always)]
+    fn get_scroll_left_index(&self) -> u32 {
+        linux_wm!(self).get_scroll_left_index()
+    }
+
+    #[inline(always)]
+    fn get_scroll_right_index(&self) -> u32 {
+        linux_wm!(self).get_scroll_right_index()
+    }
+
+    fn as_any(&'window self) -> &dyn Any {
+        todo!()
+    }
+
+
+
+}
+*/
+
+/*
 /// Get linux Display. Will try wayland as provider first then X11.
 /// 
 /// # Error(s)
@@ -22,7 +498,7 @@ pub(crate) fn get_linux_window(width:u32, height:u32) -> Result<impl Window, Stu
     // TODO: Replace with Wayland first
     get_x11_window(width, height)
 
-    /*
+    
      // Try Wayland first
      match Window::from_provider(WindowProvider::Wayland, width, height) {
         Ok(window) => {
@@ -41,8 +517,9 @@ pub(crate) fn get_linux_window(width:u32, height:u32) -> Result<impl Window, Stu
             }
         },
     }
-    */
+    
 }
+
 
 pub fn get_x11_window(width:u32, height:u32) -> Result<impl Window, StudioError> {
     if x11::X11Window::is_supported() {
@@ -77,7 +554,7 @@ pub(crate) fn get_linux_screen_list() -> Result<ScreenList, StudioError> {
    }
 }
 
-/*
+
 /// Macro shortcut to execute either wayland or x11 function.
 #[doc(hidden)]
 #[macro_export]

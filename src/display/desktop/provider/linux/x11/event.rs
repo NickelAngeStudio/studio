@@ -1,88 +1,86 @@
 //! Contains inline event functions.
 
-use std::{ffi::{c_int, c_ulong, c_char, CStr}, ptr::null_mut};
+use std::{ffi::{c_int, c_ulong, c_char}, ptr::null_mut};
 
-use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}, pointer::PointerMode, provider::linux::x11::cbind::functs::XGetAtomName, window::Window};
+use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}, manager::WindowManager};
 
-use super::{X11Window, cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent}}};
+use super::{ cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent, XEventsQueued, XSync}}, X11WindowManager};
 use super::cbind::{constants::* };
 
 
 /// Constant value of the window closing message.
 pub const WINDOW_CLOSING_MESSAGE_TYPE:u64 = 327;
 
-impl X11Window {
+impl X11WindowManager {
+
+    /// Get the event queue count
+    #[inline(always)]
+    pub(crate) fn get_event_count(&self) -> usize {
+        unsafe {
+            XEventsQueued(self.display, 0).try_into().unwrap()
+        }   
+    }
+
+    /// Sync X11 window events.
+    #[inline(always)]
+    pub(crate) fn sync(&self) {
+        unsafe {
+            XSync(self.display, false);
+        }
+    }
 
     /// Get a formatted event according to xevent type
     #[inline(always)]
     #[allow(non_upper_case_globals)]
     pub(super) fn get_event(&mut self) -> Event {
         unsafe {
-            // Only if we have something to poll
-            if self.event_count > 0 {
+            if self.event_count > 0 {    // If event count > 0
                 self.event_count -= 1;  // Decrease event count
-
-                match self.retained_event {
-                    Some(event) => {
-                        self.retained_event = Option::None;
-                        event   // Return retained event
-                    },
-                    Option::None => {
-                        XNextEvent(self.display, &mut self.x_event);
-                        let xevent = self.x_event; 
-                        
-                        match xevent._type {
-                            KeyPress => self.get_key_press_event(&xevent),
-                            KeyRelease=> self.get_key_release_event(&xevent),
-                            ButtonPress=> self.get_button_press_event(&xevent),
-                            ButtonRelease=> self.get_button_release_event(&xevent),
-                            MotionNotify=> self.get_motion_notify_event(&xevent),  
-                            EnterNotify=> self.get_enter_notify_event(&xevent),
-                            LeaveNotify=> self.get_leave_notify_event(&xevent),
-                            FocusIn=> self.get_focus_in_event(&xevent),
-                            FocusOut=> self.get_focus_out_event(&xevent),
-                            KeymapNotify=> self.get_keymap_notify_event(&xevent),
-                            Expose=> self.get_expose_event(&xevent),
-                            GraphicsExpose=> self.get_graphics_expose_event(&xevent),
-                            NoExpose=> self.get_no_expose_event(&xevent),
-                            VisibilityNotify=> self.get_visibility_notify_event(&xevent),
-                            CreateNotify=> self.get_create_notify_event(&xevent),
-                            DestroyNotify=> self.get_destroy_notify_event(&xevent),
-                            UnmapNotify=> self.get_unmap_notify_event(&xevent),
-                            MapNotify=> self.get_map_notify_event(&xevent),
-                            MapRequest=> self.get_map_request_event(&xevent),
-                            ReparentNotify=> self.get_reparent_notify_event(&xevent),
-                            ConfigureNotify=> self.get_configure_notify_event(&xevent),
-                            ConfigureRequest=> self.get_configure_request_event(&xevent),
-                            GravityNotify=> self.get_gravity_notify_event(&xevent),
-                            CirculateNotify=> self.get_circulate_notify_event(&xevent),
-                            CirculateRequest=> self.get_circulate_request_event(&xevent),
-                            PropertyNotify=> self.get_property_notify_event(&xevent),
-                            SelectionClear=> self.get_selection_clear_event(&xevent),
-                            SelectionRequest=> self.get_selection_request_event(&xevent),
-                            SelectionNotify=> self.get_selection_notify_event(&xevent),
-                            ColormapNotify=> self.get_colormap_notify_event(&xevent),
-                            ClientMessage=> self.get_client_message_event(&xevent),
-                            MappingNotify=> self.get_mapping_notify_event(&xevent),
-                            GenericEvent=> self.get_generic_event(&xevent),
-                            _ => self.get_unknown_event(&xevent),
-                        }
-                    
-                    }
+                XNextEvent(self.display, &mut self.x_event);
+                let xevent = self.x_event; 
+                
+                match xevent._type {
+                    KeyPress => self.get_key_press_event(&xevent),
+                    KeyRelease=> self.get_key_release_event(&xevent),
+                    ButtonPress=> self.get_button_press_event(&xevent),
+                    ButtonRelease=> self.get_button_release_event(&xevent),
+                    MotionNotify=> self.get_motion_notify_event(&xevent),  
+                    EnterNotify=> self.get_enter_notify_event(&xevent),
+                    LeaveNotify=> self.get_leave_notify_event(&xevent),
+                    FocusIn=> self.get_focus_in_event(&xevent),
+                    FocusOut=> self.get_focus_out_event(&xevent),
+                    KeymapNotify=> self.get_keymap_notify_event(&xevent),
+                    Expose=> self.get_expose_event(&xevent),
+                    GraphicsExpose=> self.get_graphics_expose_event(&xevent),
+                    NoExpose=> self.get_no_expose_event(&xevent),
+                    VisibilityNotify=> self.get_visibility_notify_event(&xevent),
+                    CreateNotify=> self.get_create_notify_event(&xevent),
+                    DestroyNotify=> self.get_destroy_notify_event(&xevent),
+                    UnmapNotify=> self.get_unmap_notify_event(&xevent),
+                    MapNotify=> self.get_map_notify_event(&xevent),
+                    MapRequest=> self.get_map_request_event(&xevent),
+                    ReparentNotify=> self.get_reparent_notify_event(&xevent),
+                    ConfigureNotify=> self.get_configure_notify_event(&xevent),
+                    ConfigureRequest=> self.get_configure_request_event(&xevent),
+                    GravityNotify=> self.get_gravity_notify_event(&xevent),
+                    CirculateNotify=> self.get_circulate_notify_event(&xevent),
+                    CirculateRequest=> self.get_circulate_request_event(&xevent),
+                    PropertyNotify=> self.get_property_notify_event(&xevent),
+                    SelectionClear=> self.get_selection_clear_event(&xevent),
+                    SelectionRequest=> self.get_selection_request_event(&xevent),
+                    SelectionNotify=> self.get_selection_notify_event(&xevent),
+                    ColormapNotify=> self.get_colormap_notify_event(&xevent),
+                    ClientMessage=> self.get_client_message_event(&xevent),
+                    MappingNotify=> self.get_mapping_notify_event(&xevent),
+                    GenericEvent=> self.get_generic_event(&xevent),
+                    _ => self.get_unknown_event(&xevent),
                 }
+                
             } else {
                 Event::None   // Return None event
             }
         }
     }
-
-    /// Retain an event for next fetch.
-    #[inline(always)]
-    fn retain_event(&mut self, retain: Event) {
-        self.retained_event = Some(retain);
-        self.event_count += 1;
-    }
-    
 
     /// Get Event created from KeyPress
     #[inline(always)]
@@ -97,7 +95,7 @@ impl X11Window {
     pub(super) fn get_key_release_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
 
-            if self.keyboard.auto_repeat {  // No anti-repeat routine
+            if self.auto_repeat {  // No anti-repeat routine
                 Event::Keyboard(EventKeyboard::KeyUp(xevent._xkey._keycode))
             } else {    // Use anti-repeat routine
                 self.get_anti_repeat_key_release_event(xevent)
@@ -130,7 +128,7 @@ impl X11Window {
                 }
 
                 // 5. If not ignored, retain peeked event
-                self.retain_event(peeked);
+                self.push_event(peeked);
             } 
             
             // Key is not repeating, return current keyup
@@ -167,26 +165,27 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_motion_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
-            match self.pointer.mode {   
-                PointerMode::Pointer => {
-                    self.pointer.position = (xevent._xmotion._x, xevent._xmotion._y);
-                    Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y)))
-                },
+            Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y)))
+            /*
+            match self.property.pointer.mode{
+                PointerMode::Cursor => Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y))),
                 PointerMode::Acceleration => {
-                    let position = (xevent._xmotion._x - self.property.center.0, 
+                    // Calc delta acceleration
+                    let acceleration = (xevent._xmotion._x - self.property.center.0, 
                         xevent._xmotion._y - self.property.center.1);
-                    // Report acceleration only if movement occurred
-                    if position.0 != 0 || position.1 != 0 {
-                        // Re-center pointer
-                        self.set_pointer_position(self.property.center);
 
-                        // Return position
-                        Event::Mouse(EventMouse::Moved(position))
+                    if acceleration.0 != 0 && acceleration.1 != 0 { // Send acceleration only if it moved.
+                        // Reset pointer to center
+                        self.set_pointer_position(&self.property.center);
+
+                        // Send acceleration event.
+                        Event::Mouse(EventMouse::Acceleration(acceleration))
                     } else {
-                        self.poll_event()
+                        self.get_event()   // Ignore and poll next event
                     }
-                }
+                },     
             }
+            */
         }
     }
 
@@ -195,12 +194,12 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_enter_notify_event(&mut self, _xevent : &XEvent) -> Event {
         // Hide cursor if supposed to be hidden.
-        if !self.pointer.is_visible {
-            self.pointer.is_visible = true;
+        if !self.pointer_visible {
+            self.pointer_visible = true;
             self.hide_pointer();
         }
 
-        Event::Window(EventWindow::CursorEnter())
+        Event::Window(EventWindow::CursorEnter)
     }
 
     /// Get Event created from LeaveNotify
@@ -208,12 +207,12 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_leave_notify_event(&mut self, _xevent : &XEvent) -> Event {
          // Show hidden cursor when out of window.
-         if !self.pointer.is_visible {
+         if !self.pointer_visible {
             self.show_pointer();
-            self.pointer.is_visible = false;    // Tell pointer it is still hidden
+            self.pointer_visible = false;    // Tell pointer it is still hidden
         }
 
-        Event::Window(EventWindow::CursorLeave())
+        Event::Window(EventWindow::CursorLeave)
     }
 
     /// Get Event created from FocusIn
@@ -221,11 +220,11 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_focus_in_event(&mut self, _xevent : &XEvent) -> Event {
         // If cursor is confined, confine cursor on focus.
-        if self.pointer.is_confined {
+        if self.pointer_confined {
             self.confine_pointer();
         }
 
-        Event::Window(EventWindow::Focus())
+        Event::Window(EventWindow::Focus)
     }
 
     /// Get Event created from FocusOut
@@ -233,12 +232,12 @@ impl X11Window {
     #[inline(always)]
     pub(super) fn get_focus_out_event(&mut self, _xevent : &XEvent) -> Event {
         // If cursor is confined, confine cursor on focus.
-        if self.pointer.is_confined {
+        if self.pointer_confined {
             self.release_pointer();
-            self.pointer.is_confined = true;    // Tell pointer it is still confined
+            self.pointer_confined = true;    // Tell pointer it is still confined
         }
 
-        Event::Window(EventWindow::Blur())
+        Event::Window(EventWindow::Blur)
     }
 
     /// Get Event created from KeymapNotify
@@ -289,9 +288,9 @@ impl X11Window {
     pub(super) fn get_visibility_notify_event(&self, xevent : &XEvent) -> Event {
         unsafe {
             if xevent._xvisibility._state == VisibilityUnobscured {
-                Event::Window(EventWindow::Shown())
+                Event::Window(EventWindow::Shown)
             } else {
-                Event::Window(EventWindow::Hidden())
+                Event::Window(EventWindow::Hidden)
             }
         }
     }
@@ -373,17 +372,16 @@ impl X11Window {
             // By default, set event as none.
             let mut event = Event::None;
 
-            if position != self.property.position && size != self.property.size {
+            if position != self.position && size != self.size {
                 event = Event::Window(EventWindow::MovedResized(position, size));
-            } else if position != self.property.position {
+            } else if position != self.position {
                 event = Event::Window(EventWindow::Moved(position));
-            } else if size != self.property.size  {
+            } else if size != self.size  {
                 event = Event::Window(EventWindow::Resized(size));
             }
 
-            // Update window properties
-            self.property.position = position;
-            self.property.size = size;
+            self.position = position;
+            self.size = size;
 
             event
         }
@@ -547,29 +545,29 @@ impl X11Window {
 
             // Return event. By priority > Fullscreen > Minimized > Maximized > Restored > None
             if fullscreen {   // Send fullscreen if not already registered.
-                if !self.property.is_fullscreen {
-                    event = Event::Window(EventWindow::Fullscreen());
+                if !self.fullscreen {
+                    event = Event::Window(EventWindow::Fullscreen);
                 }
             } else if hidden {   // Send minimized if not already registered.
-                    if !self.property.is_minimized {
-                        event = Event::Window(EventWindow::Minimized());
+                    if !self.minimized {
+                        event = Event::Window(EventWindow::Minimized);
                     }
             } else if maximized {   // Send maximized if not already registered.
-                if !self.property.is_maximized {
-                    event = Event::Window(EventWindow::Maximized());
+                if !self.maximized {
+                    event = Event::Window(EventWindow::Maximized);
                 }
             } else {    // Send restore if not already registered.
-                if self.property.is_fullscreen != fullscreen || 
-                    self.property.is_maximized != maximized || 
-                    self.property.is_minimized != hidden {
-                        event = Event::Window(EventWindow::Restored());
+                if self.fullscreen != fullscreen || 
+                    self.maximized != maximized || 
+                    self.minimized != hidden {
+                        event = Event::Window(EventWindow::Restored);
                     }
             }
 
             // Update window properties
-            self.property.is_fullscreen = fullscreen;
-            self.property.is_maximized = maximized;
-            self.property.is_minimized = hidden;
+            self.fullscreen = fullscreen;
+            self.maximized = maximized;
+            self.minimized = hidden;
 
             event
         }
@@ -625,7 +623,7 @@ impl X11Window {
     pub(super) fn get_client_message_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
             match xevent._xclient._message_type {
-                WINDOW_CLOSING_MESSAGE_TYPE => Event::Window(EventWindow::Close()),
+                WINDOW_CLOSING_MESSAGE_TYPE => Event::Window(EventWindow::CloseRequest),
                 _ => {
                     #[cfg(debug_assertions)]
                     println!("Unknown ClientMessage({:p}), Type({})", self, xevent._xclient._message_type);

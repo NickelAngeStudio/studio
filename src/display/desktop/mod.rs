@@ -2,34 +2,23 @@
 //! 
 //! Contains components needed to create and manage a desktop windows.
 
-use cfg_boost::match_cfg;
-use super::StudioError;
+// Enumeration of desktop error
+pub mod error;
 
 // Hardware screen list
 pub mod screen;
 
-// Pointer module
-pub mod pointer;
+// Window manager definition.
+pub mod manager;
 
-// Keyboard properties module
-pub mod keyboard;
-
-// Window abstraction and properties
+// Window definition.
 pub mod window;
+
+// Window properties.
+pub mod property;
 
 // Window events input such as mouse, keyboard, etc..
 pub mod event;
 
 // Window providers
 pub mod provider;
-
-
-/// Create a window from width and height
-pub fn create_window(width: u32, height: u32) -> Result<impl window::Window, StudioError>  {
-    match_cfg! {
-        linux => {
-            provider::linux::get_linux_window(width, height)
-        },
-        _ => todo!()
-    }
-}

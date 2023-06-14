@@ -1,4 +1,4 @@
-use crate::display::error::DisplayError;
+use crate::display::DisplayError;
 
 /// Union of all possibles errors that might occurs within Studio.
 #[derive(Debug, Clone, Copy)]

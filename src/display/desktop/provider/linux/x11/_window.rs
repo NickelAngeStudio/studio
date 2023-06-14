@@ -4,7 +4,7 @@ use std::{panic::catch_unwind};
 
 use crate::display::desktop::keyboard::KeyboardProperty;
 use crate::display::desktop::pointer::{PointerMode, PointerProperty};
-use crate::display::desktop::window::{ Window, FullscreenMode, WindowProperty};
+use crate::display::desktop::window::{ Window, FullScreenMode, WindowProperty, WindowShowOption};
 use crate::error::StudioError;
 use super::cbind::{attributes::*, constants::*, functs::*, structs::* };
 
@@ -83,8 +83,8 @@ pub struct X11Window {
     /// Used to fetch X11 events
     pub(crate) x_event : XEvent,    
 
-    /// Retained event that will be sent next poll_event 
-    pub(crate) retained_event : Option<Event>,
+    /// Retained events that will be sent next poll_event 
+    pub(crate) retained_events : Vec<Event>,
 
     /// C-compatible string for window title
     pub(crate) wm_title : CString,
@@ -141,7 +141,7 @@ impl X11Window {
                 pointer: PointerProperty::new(POINTER_LEFT_BUTTON,POINTER_RIGHT_BUTTON,POINTER_MIDDLE_BUTTON,POINTER_NEXT_BUTTON,
                     POINTER_PREVIOUS_BUTTON, POINTER_SCROLL_UP, POINTER_SCROLL_DOWN, POINTER_SCROLL_LEFT, POINTER_SCROLL_RIGHT),
                 property,
-                retained_event: Option::None,  // No retained event for now.
+                retained_events: Vec::new(),  // No retained event for now.
                 keyboard: KeyboardProperty::new(),  
             }
         }
@@ -316,7 +316,7 @@ impl Window for X11Window {
         }
     }
 
-    fn set_fullscreen(&mut self, fs_mode : FullscreenMode) {
+    fn set_fullscreen(&mut self, fs_mode : FullScreenMode) {
         unsafe {
 
             if !self.property.is_fullscreen {
@@ -328,15 +328,15 @@ impl Window for X11Window {
             XDestroyWindow(self.display, self.window);
 
             match fs_mode {
-                FullscreenMode::CurrentScreen => {
+                FullScreenMode::CurrentScreen => {
                     // Recreate window as fullscreen
                     self.window = X11Window::create_x11_window(self.display, XDefaultRootWindow(self.display),
                      &mut self.atoms, (0,0),   self.screens.get_primary_screen().unwrap().get_current_resolution(), true);      
                 },
-                FullscreenMode::PrimaryScreen => {
+                FullScreenMode::PrimaryScreen => {
                     todo!()
                 },
-                FullscreenMode::DesktopScreen => {
+                FullScreenMode::DesktopScreen => {
                     todo!()
                 },
             }
@@ -388,6 +388,25 @@ impl Window for X11Window {
 
     fn disable_autorepeat(&mut self) {
         self.keyboard.auto_repeat = false;
+    }
+
+    fn show(&self, option: WindowShowOption) {
+        match option {
+            WindowShowOption::Normal => todo!(),
+            WindowShowOption::Child(parent) => {
+                
+            },
+            WindowShowOption::Top(_) => todo!(),
+            WindowShowOption::Modal(_) => todo!(),
+        }
+    }
+
+    fn hide(&self) {
+        todo!()
+    }
+
+    fn close(&self) {
+        todo!()
     }
 
 
