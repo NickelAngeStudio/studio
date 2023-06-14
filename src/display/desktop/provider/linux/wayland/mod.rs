@@ -2,7 +2,7 @@ use crate::{display::desktop::{manager::WindowManager, provider::WindowProvider,
 
 /// Static cache to know if wayland is supported
 #[doc(hidden)]
-pub static mut WaylandSupported : Option<bool> = None;
+pub static mut WAYLAND_SUPPORTED : Option<bool> = None;
 
 pub(crate) struct WaylandWindowManager{
 
@@ -10,11 +10,11 @@ pub(crate) struct WaylandWindowManager{
 
 impl WaylandWindowManager {
     pub fn is_supported() -> bool { 
-        match unsafe { WaylandSupported } {
+        match unsafe { WAYLAND_SUPPORTED } {
             Some(supported) => supported,
             None => {
                 unsafe {
-                    WaylandSupported = Some(false);
+                    WAYLAND_SUPPORTED = Some(false);
                 }
                 false
             },
@@ -39,12 +39,12 @@ impl WindowManager for WaylandWindowManager {
     }
 
     #[inline(always)]
-    fn push_event(&mut self, retain: Event){
+    fn push_event(&mut self, _retain: Event){
         todo!()
     }
 
     #[inline(always)]
-    fn show(&mut self, property : &crate::display::desktop::property::WindowProperty) {
+    fn show(&mut self, _property : &crate::display::desktop::property::WindowProperty) {
         todo!()
     }
 
@@ -59,17 +59,17 @@ impl WindowManager for WaylandWindowManager {
     }
 
     #[inline(always)]
-    fn set_title(&mut self, title : &String) -> bool {
+    fn set_title(&mut self, _title : &String) -> bool {
         todo!()
     }
 
     #[inline(always)]
-    fn set_position(&mut self, position : (i32,i32)) -> bool {
+    fn set_position(&mut self, _position : (i32,i32)) -> bool {
         todo!()
     }
 
     #[inline(always)]
-    fn set_size(&mut self, size : &(u32,u32)) -> bool {
+    fn set_size(&mut self, _size : &(u32,u32)) -> bool {
         todo!()
     }
 
@@ -104,7 +104,7 @@ impl WindowManager for WaylandWindowManager {
     }
 
     #[inline(always)]
-    fn set_pointer_position(&mut self, position : &(i32, i32)) -> bool {
+    fn set_pointer_position(&mut self, _position : &(i32, i32)) -> bool {
         todo!()
     }
 
