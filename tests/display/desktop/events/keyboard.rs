@@ -1,38 +1,36 @@
-use std::{rc::Rc, cell::RefCell};
-
 use cfg_boost::target_cfg;
-use studio::display::desktop::{window::Window, property::{WindowPropertySet, KeyboardPropertySet}};
+use studio::display::desktop::{window::{Window}, property::{WindowPropertySet, KeyboardPropertySet}};
 
 use crate::{display::desktop::{ rsrcs::{main_loop}}, tools::{RESET_CONSOLE, BLUE_CONSOLE}};
 
 
-target_cfg! {
-    linux => {
-        pub const SPACE_KEY_VALUE:u32 = 65;     // Space key value for Linux
-    }
-}
-
 /// Test keyboard events
-pub fn test_keyboard(window: Rc<RefCell<Window>>){
+pub fn test_keyboard(){
+
+    let mut window = Window::new().unwrap();
+
+    window.show();
 
     println!("{}{}{}", BLUE_CONSOLE, "Starting keyboard event tests ...", RESET_CONSOLE);
     
     // Hold spacebar test
-    main_loop(window.clone(), &mut hold_space::HoldSpace::new());
+    main_loop(&mut window, &mut hold_space::HoldSpace::new());
 
     // Different keys test
-    main_loop(window.clone(), &mut different_keys::DifferentKeys::new());
+    main_loop(&mut window, &mut different_keys::DifferentKeys::new());
 
     // Hold different keys
-    main_loop(window.clone(), &mut hold_different_keys::HoldDifferentKeys::new());
+    main_loop(&mut window, &mut hold_different_keys::HoldDifferentKeys::new());
 
     // Auto-repeat
-    window.borrow_mut().set_property(WindowPropertySet::Keyboard(KeyboardPropertySet::EnableAutoRepeat)).expect("");
-    main_loop(window.clone(), &mut auto_repeat_space::AutoRepeatSpace::new());
-    window.borrow_mut().set_property(WindowPropertySet::Keyboard(KeyboardPropertySet::DisableAutoRepeat)).expect("");
+    window.set_property(&WindowPropertySet::Keyboard(KeyboardPropertySet::EnableAutoRepeat)).expect("");
+    main_loop(&mut window, &mut auto_repeat_space::AutoRepeatSpace::new());
+    window.set_property(&WindowPropertySet::Keyboard(KeyboardPropertySet::DisableAutoRepeat)).expect("");
     
 
     println!("{}{}{}", BLUE_CONSOLE, "... keyboard event tests ended ...", RESET_CONSOLE);
+
+
 
 
 }
@@ -43,11 +41,10 @@ pub fn test_keyboard(window: Rc<RefCell<Window>>){
 mod hold_space {
     use std::time::Instant;
 
-    use studio::display::desktop::event::{Event, EventKeyboard};
+
+    use studio::display::desktop::event::{Event, keyboard::{EventKeyboard, KeyIdentity}};
 
     use crate::{display::desktop::rsrcs::EventReceiver, tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}};
-
-    use super::SPACE_KEY_VALUE;
 
     const HOLD_TIME_SEC:u64 = 5;  // Count of seconds to hold bar
 
@@ -68,20 +65,21 @@ mod hold_space {
 
         /// Step where user hold space
         #[inline(always)]
-        pub(super) fn hold_space_step(&mut self, event: Event){
+        pub(super) fn hold_space_step(&mut self, event: &Event){
             
             // Only validate keyboard events
             if let Event::Keyboard(kb_event) = event {
                 match kb_event {
-                    EventKeyboard::KeyDown(keycode) => {
-                        if keycode == SPACE_KEY_VALUE {
+                    EventKeyboard::KeyDown(key) => {
+                        println!("KD={:?}", key.identity());
+                        if key.identity() == KeyIdentity::SPCE {
                             println!("{}{}{}", BLUE_CONSOLE, "Space is now down ...", RESET_CONSOLE);
                             self.space_pressed = true;
                             self.duration = Instant::now();
                         }
                     },
-                    EventKeyboard::KeyUp(keycode) => {
-                        if keycode == SPACE_KEY_VALUE {
+                    EventKeyboard::KeyUp(key) => {
+                        if key.identity() == KeyIdentity::SPCE {
                             println!("{}{}{}", BLUE_CONSOLE, "Space is released too soon, try again ...", RESET_CONSOLE);
                             self.space_pressed = false;
                         }
@@ -98,7 +96,7 @@ mod hold_space {
 
         /// Step where user release space.
         #[inline(always)]
-        pub(super) fn release_space_step(&mut self, event: Event) {
+        pub(super) fn release_space_step(&mut self, event: &Event) {
             if !self.step_msg { // Show next step message.
                 println!("{}Release SPACE...{}", YELLOW_CONSOLE, RESET_CONSOLE);
                 self.step_msg = true; 
@@ -106,8 +104,8 @@ mod hold_space {
 
             if let Event::Keyboard(kb_event) = event {
                 // Verify if space key was released.
-                if let EventKeyboard::KeyUp(keycode) = kb_event {
-                    if keycode == SPACE_KEY_VALUE {
+                if let EventKeyboard::KeyUp(key) = kb_event {
+                    if key.identity() == KeyIdentity::SPCE {
                         self.is_done = true;
                     }
                 }
@@ -119,7 +117,7 @@ mod hold_space {
 
     impl EventReceiver for HoldSpace {
 
-    fn receive(&mut self, event: Event) {
+    fn receive(&mut self, event: &Event) {
 
         if !self.step_done {
             self.hold_space_step(event);
@@ -143,7 +141,8 @@ mod hold_space {
 mod different_keys{
     use std::collections::HashMap;
 
-    use studio::display::desktop::event::{Event, EventKeyboard};
+
+    use studio::display::desktop::event::{Event, keyboard::EventKeyboard};
 
     use crate::{tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}, display::desktop::rsrcs::EventReceiver};
 
@@ -153,7 +152,7 @@ mod different_keys{
     /// Struct that test pressing multiples differents keys
     pub struct DifferentKeys {
         is_done: bool,          // Is the test finished.
-        keymap : HashMap<u32, usize>,
+        keymap : HashMap<u8, usize>,
         almost_done_msg:bool,   // Indicate if almost done is printed
     }
 
@@ -166,7 +165,7 @@ mod different_keys{
 
     impl EventReceiver for DifferentKeys {
 
-        fn receive(&mut self, event: Event) {
+        fn receive(&mut self, event: &Event) {
 
             if self.keymap.len() % 10 == 0 && !self.almost_done_msg {   // Tell progression each 10 keys
                 println!("{}Thats {} keys, only {} mores!{}", YELLOW_CONSOLE, self.keymap.len(), KEY_COUNT - self.keymap.len(), RESET_CONSOLE);
@@ -175,10 +174,10 @@ mod different_keys{
 
             if let Event::Keyboard(kb_event) = event {
                 match kb_event {
-                    EventKeyboard::KeyDown(keycode) => {
-                        if !self.keymap.contains_key(&keycode) {
+                    EventKeyboard::KeyDown(key) => {
+                        if !self.keymap.contains_key(&key.keycode) {
                             self.almost_done_msg = false;
-                            self.keymap.insert(keycode, 1);
+                            self.keymap.insert(key.keycode, 1);
                         } else {
                             println!("{}{}{}", BLUE_CONSOLE, "You already pressed that key!", RESET_CONSOLE);
                         }
@@ -209,7 +208,8 @@ mod different_keys{
 mod hold_different_keys{
     use std::{collections::HashMap, time::Instant};
 
-    use studio::display::desktop::event::{Event, EventKeyboard};
+
+    use studio::display::desktop::event::{Event, keyboard::EventKeyboard};
 
     use crate::{tools::{YELLOW_CONSOLE, RESET_CONSOLE, MAGENTA_CONSOLE}, display::desktop::rsrcs::EventReceiver};
 
@@ -222,7 +222,7 @@ mod hold_different_keys{
     /// Struct that test holding space bar as an Event Receiver.
     pub struct HoldDifferentKeys {
         is_done: bool,          // Is the test finished.
-        keymap : HashMap<u32, usize>,
+        keymap : HashMap<u8, usize>,
         duration : Instant,     // Duration of press
         key_valid:bool,         // True if keys are valid
         print_msg:bool,     // Verify if we print a message
@@ -237,7 +237,7 @@ mod hold_different_keys{
 
     impl EventReceiver for HoldDifferentKeys {
 
-        fn receive(&mut self, event: Event) {
+        fn receive(&mut self, event: &Event) {
 
             let keypress = self.keymap.iter().filter(|x| x.1 == &1).count();
 
@@ -294,12 +294,12 @@ mod hold_different_keys{
             if let Event::Keyboard(kb_event) = event {
                 self.print_msg = true;
                 match kb_event {
-                    EventKeyboard::KeyDown(keycode) => {
-                        self.keymap.insert(keycode, 1);
+                    EventKeyboard::KeyDown(key) => {
+                        self.keymap.insert(key.keycode, 1);
                        
                     },
-                    EventKeyboard::KeyUp(keycode) => {
-                        self.keymap.insert(keycode, 0);
+                    EventKeyboard::KeyUp(key) => {
+                        self.keymap.insert(key.keycode, 0);
                     },
                 }
             }
@@ -322,11 +322,11 @@ mod hold_different_keys{
 /// 
 /// This test is used to see auto-repeat can be enabled.
 mod auto_repeat_space {
-    use studio::display::desktop::event::{Event, EventKeyboard};
+
+
+    use studio::display::desktop::event::{Event, keyboard::{EventKeyboard, KeyIdentity}};
 
     use crate::{display::desktop::rsrcs::EventReceiver, tools::{YELLOW_CONSOLE, RESET_CONSOLE}};
-
-    use super::SPACE_KEY_VALUE;
 
     const SPACE_BAR_COUNT:usize = 300;  // Count of spacebar press needed to finish (about 5 secs)
 
@@ -345,12 +345,12 @@ mod auto_repeat_space {
 
     impl EventReceiver for AutoRepeatSpace {
 
-    fn receive(&mut self, event: Event) {
+    fn receive(&mut self, event: &Event) {
 
         if let Event::Keyboard(kb_event) = event {
             // Verify if space key was released.
-            if let EventKeyboard::KeyUp(keycode) = kb_event {
-                if keycode == SPACE_KEY_VALUE {
+            if let EventKeyboard::KeyUp(key) = kb_event {
+                if key.identity() == KeyIdentity::SPCE {
                     self.press_count+=1;    // Increment press count
                 }
             }

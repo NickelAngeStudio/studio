@@ -1,6 +1,6 @@
 //! Linux implementations of [WindowManager].
 
-use crate::{display::{ desktop::{ event::Event, property::{WindowProperty}, manager::WindowManager}, DisplayError}, error::StudioError};
+use crate::{display::{ desktop::{ manager::WindowManager, window::{  Window}, event::{Event, keyboard::{Key, KeyIdentity}}, property::{WindowProperty, SubWindowOption, WindowPositionOption}}, DisplayError}, error::StudioError};
 use self::{wayland::WaylandWindowManager, x11::X11WindowManager};
 use super::WindowProvider;
 
@@ -12,9 +12,9 @@ pub mod x11;
 
 
 /// Enumeration of implemented [WindowManager]
-enum ImplementedLinuxWindowManager{
+enum ImplementedLinuxWindowManager<'window>{
     Wayland(WaylandWindowManager),
-    X11(X11WindowManager)
+    X11(X11WindowManager<'window>)
 }
 
 /// Macro that redirect function to correct window manager. 
@@ -34,11 +34,11 @@ macro_rules! wmfn {
     };
 }
 
-pub struct LinuxWindowManager {
-    wm : ImplementedLinuxWindowManager,
+pub struct LinuxWindowManager<'window> {
+    wm : ImplementedLinuxWindowManager<'window>,
 }
 
-impl WindowManager for LinuxWindowManager {
+impl<'window> WindowManager<'window> for LinuxWindowManager<'window> {
     fn new() -> Result<Self, StudioError> where Self : Sized {
         
         if wayland::WaylandWindowManager::is_supported() {
@@ -61,17 +61,17 @@ impl WindowManager for LinuxWindowManager {
     }
 
     #[inline(always)]
-    fn poll_event(&mut self) -> Event  {
+    fn poll_event(&mut self) -> &Event  {
         wmfn!(mut self, poll_event())
     }
 
-    fn push_event(&mut self, event: Event){
-        wmfn!(mut self, push_event(event))
+    fn push_event(&self, event: Event){
+        wmfn!(self, push_event(event))
     }
 
     #[inline(always)]
-    fn show(&mut self, property : &WindowProperty) {
-        wmfn!(mut self, show(property))
+    fn show(&mut self){
+        wmfn!(mut self, show())
     }
 
     #[inline(always)]
@@ -90,8 +90,8 @@ impl WindowManager for LinuxWindowManager {
     }
 
     #[inline(always)]
-    fn set_position(&mut self, position : (i32,i32)) -> bool {
-         wmfn!(mut self, set_position(position))
+    fn set_position(&mut self, option : WindowPositionOption) -> bool {
+         wmfn!(mut self, set_position(option))
     }
 
     #[inline(always)]
@@ -130,7 +130,7 @@ impl WindowManager for LinuxWindowManager {
     }
 
     #[inline(always)]
-    fn set_pointer_position(&mut self, position : &(i32, i32)) -> bool {
+    fn set_pointer_position(&mut self, position : (i32, i32)) -> bool {
          wmfn!(mut self, set_pointer_position(position))
     }
 
@@ -160,8 +160,36 @@ impl WindowManager for LinuxWindowManager {
     }  
 
     #[inline(always)]
-    fn get_display_handle(&self) -> Option<*const usize> {
+    fn get_display_handle(&self) -> *const usize {
         wmfn!(self, get_display_handle())
+    }
+
+    fn get_properties(&self) -> &WindowProperty {
+        wmfn!(self, get_properties())
+    }
+
+    fn set_parent<'manager: 'window>(&mut self, parent : &'manager Window<'manager>, option : SubWindowOption) -> bool {
+        wmfn!(mut self, set_parent(parent, option))
+    }
+
+    fn remove_parent(&mut self) -> bool {
+        wmfn!(mut self, remove_parent())
+    }
+
+    fn recreate(&mut self) {
+        wmfn!(mut self, recreate());
+    }
+
+    fn restore(&mut self) {
+        wmfn!(mut self, restore());
+    }
+
+    fn set_fullscreen(&mut self, fsmode : crate::display::desktop::property::FullScreenMode) -> bool {
+        wmfn!(mut self, set_fullscreen(fsmode))
+    }
+
+    fn set_pointer_mode(&mut self, mode : &crate::display::desktop::property::PointerMode) -> bool {
+        wmfn!(mut self, set_pointer_mode(mode))
     }
 
 }

@@ -14,3 +14,8 @@ pub mod attributes;
 #[allow(unused)]                    // Remove unused variable notification
 #[allow(non_snake_case)]            // Imported C members aren't formatted according to convention.
 pub mod structs;
+
+// Contains xkb struct definition.
+#[allow(unused)]                    // Remove unused variable notification
+#[allow(non_snake_case)]            // Imported C members aren't formatted according to convention.
+pub mod xkb;

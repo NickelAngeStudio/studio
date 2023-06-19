@@ -2,7 +2,7 @@
 
 use std::{ffi::{c_int, c_ulong, c_char}, ptr::null_mut};
 
-use crate::display::desktop::{event::{Event, EventKeyboard, EventMouse, EventWindow}, manager::WindowManager};
+use crate::display::desktop::{event::{Event, keyboard::{EventKeyboard, KeyModifier, Key}, pointer::{EventPointer, PointerButton}, window::EventWindow}, manager::WindowManager, property::PointerMode};
 
 use super::{ cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent, XEventsQueued, XSync}}, X11WindowManager};
 use super::cbind::{constants::* };
@@ -11,7 +11,34 @@ use super::cbind::{constants::* };
 /// Constant value of the window closing message.
 pub const WINDOW_CLOSING_MESSAGE_TYPE:u64 = 327;
 
-impl X11WindowManager {
+/// Pointer left button index for X11
+const POINTER_LEFT_BUTTON: u32 = 1;
+
+/// Pointer middle button index for X11
+const POINTER_MIDDLE_BUTTON: u32 = 2;
+
+/// Pointer right button index for X11
+const POINTER_RIGHT_BUTTON: u32 = 3;
+
+/// Pointer previous button index for X11
+const POINTER_PREVIOUS_BUTTON: u32 = 8;
+
+/// Pointer next button index for X11
+const POINTER_NEXT_BUTTON: u32 = 9;
+
+/// Pointer scroll up index for X11
+const POINTER_SCROLL_UP: u32 = 4;
+
+/// Pointer scroll down index for X11
+const POINTER_SCROLL_DOWN: u32 = 5;
+
+/// Pointer scroll left index for X11
+const POINTER_SCROLL_LEFT: u32 = 6;
+
+/// Pointer scroll right index for X11
+const POINTER_SCROLL_RIGHT: u32 = 7;
+
+impl<'window> X11WindowManager<'window> {
 
     /// Get the event queue count
     #[inline(always)]
@@ -86,17 +113,19 @@ impl X11WindowManager {
     #[inline(always)]
     pub(super) fn get_key_press_event(&self, xevent : &XEvent) -> Event {
         unsafe {
-            Event::Keyboard(EventKeyboard::KeyDown(xevent._xkey._keycode))
+            Event::Keyboard(EventKeyboard::KeyDown(Key::new(Self::get_key_modifier_from_state(xevent._xkey._state), xevent._xkey._keycode as u8) ))
         }
     }
+
+    
 
     /// Get Event created from KeyRelease.
     #[inline(always)]
     pub(super) fn get_key_release_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
 
-            if self.auto_repeat {  // No anti-repeat routine
-                Event::Keyboard(EventKeyboard::KeyUp(xevent._xkey._keycode))
+            if self.property.keyboard.auto_repeat {  // No anti-repeat routine
+                Event::Keyboard(EventKeyboard::KeyUp(Key::new(Self::get_key_modifier_from_state(xevent._xkey._state), xevent._xkey._keycode as u8) ))
             } else {    // Use anti-repeat routine
                 self.get_anti_repeat_key_release_event(xevent)
             }
@@ -119,9 +148,9 @@ impl X11WindowManager {
                 // 2. Make sure it's keyboard event
                 if let Event::Keyboard(kb_event) = peeked {
                     // 3. Make sure it's keydown event
-                    if let EventKeyboard::KeyDown(keycode) = kb_event {
+                    if let EventKeyboard::KeyDown(key) = kb_event {
                         // 4. If same keycode, ignore both event and get next
-                        if keycode == xevent._xkey._keycode {   
+                        if key.keycode == xevent._xkey._keycode as u8 {   
                             return self.get_event();
                         }
                     }
@@ -132,8 +161,52 @@ impl X11WindowManager {
             } 
             
             // Key is not repeating, return current keyup
-            Event::Keyboard(EventKeyboard::KeyUp(xevent._xkey._keycode))
+            Event::Keyboard(EventKeyboard::KeyUp(Key::new(Self::get_key_modifier_from_state(xevent._xkey._state), xevent._xkey._keycode as u8) ))
         }
+    }
+
+/// Get modifier from Xkey state
+    /// 
+    /// Reference(s)
+    /// <https://github.com/glfw/glfw/blob/7e8da57094281c73a0be5669a4b79686b4917f6c/src/x11_window.c#L186>
+    #[inline(always)]
+    fn get_key_modifier_from_state(state : u32) -> u8 {
+
+        let mut modifier : u8 = 0;
+
+        if state & ShiftMask as u32 > 0 {   // Is SHIFT modifier on?
+            modifier = modifier | KeyModifier::SHIFT;
+        }
+            
+        if state & ControlMask as u32 > 0 { // Is CTRL modifier on?
+            modifier = modifier | KeyModifier::CTRL;
+        }
+
+        if state & Mod1Mask as u32 > 0 {    // Is ALT modifier on?
+            modifier = modifier | KeyModifier::ALT;
+        }
+
+        if state & Mod3Mask as u32 > 0 {    // Is META modifier on?
+            modifier = modifier | KeyModifier::META;
+        }
+
+        if state & Mod4Mask as u32 > 0 {    // Is COMMAND/SUPER modifier on?
+            modifier = modifier | KeyModifier::COMMAND;
+        }
+
+        if state & Mod5Mask as u32 > 0 {    // Is HYPER modifier on?
+            modifier = modifier | KeyModifier::HYPER;
+        }
+
+        if state & LockMask as u32 > 0 {    // Is CAPSLOCK on?
+            modifier = modifier | KeyModifier::CAPSLOCK;
+        }
+
+        if state & Mod2Mask as u32 > 0 {    // Is NUMLOCK on?
+            modifier = modifier | KeyModifier::NUMLOCK;
+        }
+
+        modifier
     }
 
     /// Get Event created from ButtonPress
@@ -141,22 +214,38 @@ impl X11WindowManager {
     #[inline(always)]
     pub(super) fn get_button_press_event(&self, xevent : &XEvent) -> Event {
         unsafe {
-            #[cfg(debug_assertions)]
-            println!("EventMouse::ButtonDown({})", xevent._xbutton._button); 
-
-            Event::Mouse(EventMouse::ButtonDown(xevent._xbutton._button.try_into().unwrap() , (xevent._xbutton._x, xevent._xbutton._y)))
+            Event::Pointer(EventPointer::ButtonDown( match xevent._xbutton._button {
+                POINTER_LEFT_BUTTON => PointerButton::LeftButton,
+                POINTER_MIDDLE_BUTTON => PointerButton::MiddleButton,
+                POINTER_RIGHT_BUTTON => PointerButton::RightButton,
+                POINTER_PREVIOUS_BUTTON => PointerButton::PreviousButton,
+                POINTER_NEXT_BUTTON => PointerButton::NextButton,
+                POINTER_SCROLL_UP => PointerButton::ScrollUp,
+                POINTER_SCROLL_DOWN => PointerButton::ScrollDown,
+                POINTER_SCROLL_LEFT => PointerButton::ScrollLeft,
+                POINTER_SCROLL_RIGHT => PointerButton::ScrollRight,
+                _ => PointerButton::Other(xevent._xbutton._button.try_into().unwrap()),
+            }, (xevent._xbutton._x, xevent._xbutton._y)))
         }
     }
 
     /// Get Event created from ButtonRelease
     /// Mouse button release.
     #[inline(always)]
-    pub(super) fn get_button_release_event(&self, xevent : &XEvent) -> Event {
+    pub(super) fn get_button_release_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
-            #[cfg(debug_assertions)]
-            println!("EventMouse::ButtonUp({})", xevent._xbutton._button); 
-
-            Event::Mouse(EventMouse::ButtonUp(xevent._xbutton._button.try_into().unwrap() , (xevent._xbutton._x, xevent._xbutton._y)))
+            Event::Pointer(EventPointer::ButtonUp( match xevent._xbutton._button {
+                POINTER_LEFT_BUTTON => PointerButton::LeftButton,
+                POINTER_MIDDLE_BUTTON => PointerButton::MiddleButton,
+                POINTER_RIGHT_BUTTON => PointerButton::RightButton,
+                POINTER_PREVIOUS_BUTTON => PointerButton::PreviousButton,
+                POINTER_NEXT_BUTTON => PointerButton::NextButton,
+                POINTER_SCROLL_UP => PointerButton::ScrollUp,
+                POINTER_SCROLL_DOWN => PointerButton::ScrollDown,
+                POINTER_SCROLL_LEFT => PointerButton::ScrollLeft,
+                POINTER_SCROLL_RIGHT => PointerButton::ScrollRight,
+                _ => PointerButton::Other(xevent._xbutton._button.try_into().unwrap()),
+            }, (xevent._xbutton._x, xevent._xbutton._y)))
         }
     }
 
@@ -165,10 +254,8 @@ impl X11WindowManager {
     #[inline(always)]
     pub(super) fn get_motion_notify_event(&mut self, xevent : &XEvent) -> Event {
         unsafe {
-            Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y)))
-            /*
             match self.property.pointer.mode{
-                PointerMode::Cursor => Event::Mouse(EventMouse::Moved((xevent._xmotion._x, xevent._xmotion._y))),
+                PointerMode::Cursor => Event::Pointer(EventPointer::Moved((xevent._xmotion._x, xevent._xmotion._y))),
                 PointerMode::Acceleration => {
                     // Calc delta acceleration
                     let acceleration = (xevent._xmotion._x - self.property.center.0, 
@@ -176,16 +263,15 @@ impl X11WindowManager {
 
                     if acceleration.0 != 0 && acceleration.1 != 0 { // Send acceleration only if it moved.
                         // Reset pointer to center
-                        self.set_pointer_position(&self.property.center);
+                        self.set_pointer_position(self.property.center);
 
                         // Send acceleration event.
-                        Event::Mouse(EventMouse::Acceleration(acceleration))
+                        Event::Pointer(EventPointer::Acceleration(acceleration))
                     } else {
                         self.get_event()   // Ignore and poll next event
                     }
                 },     
             }
-            */
         }
     }
 
@@ -194,8 +280,8 @@ impl X11WindowManager {
     #[inline(always)]
     pub(super) fn get_enter_notify_event(&mut self, _xevent : &XEvent) -> Event {
         // Hide cursor if supposed to be hidden.
-        if !self.pointer_visible {
-            self.pointer_visible = true;
+        if !self.property.pointer.visible {
+            self.property.pointer.visible = true;
             self.hide_pointer();
         }
 
@@ -207,9 +293,9 @@ impl X11WindowManager {
     #[inline(always)]
     pub(super) fn get_leave_notify_event(&mut self, _xevent : &XEvent) -> Event {
          // Show hidden cursor when out of window.
-         if !self.pointer_visible {
+         if !self.property.pointer.visible {
             self.show_pointer();
-            self.pointer_visible = false;    // Tell pointer it is still hidden
+            self.property.pointer.visible = false;    // Tell pointer it is still hidden
         }
 
         Event::Window(EventWindow::CursorLeave)
@@ -220,7 +306,7 @@ impl X11WindowManager {
     #[inline(always)]
     pub(super) fn get_focus_in_event(&mut self, _xevent : &XEvent) -> Event {
         // If cursor is confined, confine cursor on focus.
-        if self.pointer_confined {
+        if self.property.pointer.confined {
             self.confine_pointer();
         }
 
@@ -232,9 +318,9 @@ impl X11WindowManager {
     #[inline(always)]
     pub(super) fn get_focus_out_event(&mut self, _xevent : &XEvent) -> Event {
         // If cursor is confined, confine cursor on focus.
-        if self.pointer_confined {
+        if self.property.pointer.confined {
             self.release_pointer();
-            self.pointer_confined = true;    // Tell pointer it is still confined
+            self.property.pointer.confined = true;    // Tell pointer it is still confined
         }
 
         Event::Window(EventWindow::Blur)
@@ -372,16 +458,16 @@ impl X11WindowManager {
             // By default, set event as none.
             let mut event = Event::None;
 
-            if position != self.position && size != self.size {
+            if position != self.property.position && size != self.property.size {
                 event = Event::Window(EventWindow::MovedResized(position, size));
-            } else if position != self.position {
+            } else if position != self.property.position {
                 event = Event::Window(EventWindow::Moved(position));
-            } else if size != self.size  {
+            } else if size != self.property.size  {
                 event = Event::Window(EventWindow::Resized(size));
             }
 
-            self.position = position;
-            self.size = size;
+            self.property.position = position;
+            self.property.size = size;
 
             event
         }
@@ -549,25 +635,25 @@ impl X11WindowManager {
                     event = Event::Window(EventWindow::Fullscreen);
                 }
             } else if hidden {   // Send minimized if not already registered.
-                    if !self.minimized {
+                    if !self.property.minimized {
                         event = Event::Window(EventWindow::Minimized);
                     }
             } else if maximized {   // Send maximized if not already registered.
-                if !self.maximized {
+                if !self.property.maximized {
                     event = Event::Window(EventWindow::Maximized);
                 }
             } else {    // Send restore if not already registered.
                 if self.fullscreen != fullscreen || 
-                    self.maximized != maximized || 
-                    self.minimized != hidden {
+                    self.property.maximized != maximized || 
+                    self.property.minimized != hidden {
                         event = Event::Window(EventWindow::Restored);
                     }
             }
 
             // Update window properties
             self.fullscreen = fullscreen;
-            self.maximized = maximized;
-            self.minimized = hidden;
+            self.property.maximized = maximized;
+            self.property.minimized = hidden;
 
             event
         }

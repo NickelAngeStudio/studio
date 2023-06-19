@@ -1,4 +1,4 @@
-use crate::{display::desktop::{manager::WindowManager, provider::WindowProvider, event::Event}, error::StudioError};
+use crate::{display::desktop::{manager::WindowManager, manager::WindowProvider, Window, event::keyboard::{Key, KeyIdentity}}, error::StudioError};
 
 /// Static cache to know if wayland is supported
 #[doc(hidden)]
@@ -23,7 +23,7 @@ impl WaylandWindowManager {
     }
 }
 
-impl WindowManager for WaylandWindowManager {
+impl<'window> WindowManager<'window> for WaylandWindowManager {
     fn new() -> Result<Self, StudioError> where Self : Sized {
         todo!()
     }
@@ -33,110 +33,123 @@ impl WindowManager for WaylandWindowManager {
         WindowProvider::Wayland
     }
 
-    #[inline(always)]
-    fn poll_event(&mut self) -> crate::display::desktop::event::Event  {
+    fn get_properties(&self) -> &crate::display::desktop::property::WindowProperty {
         todo!()
     }
 
-    #[inline(always)]
-    fn push_event(&mut self, _retain: Event){
+    fn poll_event(&mut self) -> &crate::display::desktop::event::Event {
         todo!()
     }
 
-    #[inline(always)]
-    fn show(&mut self, _property : &crate::display::desktop::property::WindowProperty) {
+    fn recreate(&mut self) {
         todo!()
     }
 
-    #[inline(always)]
+    fn show(&mut self) {
+        todo!()
+    }
+
     fn close(&mut self) {
         todo!()
     }
 
-    #[inline(always)]
     fn hide(&mut self) {
         todo!()
     }
 
-    #[inline(always)]
+    fn restore(&mut self) {
+        todo!()
+    }
+
+    fn get_window_handle(&self) -> Option<*const usize> {
+        todo!()
+    }
+
+    fn push_event(&self, _event: crate::display::desktop::event::Event) {
+        todo!()
+    }
+
+    #[cfg(any(doc,target_os = "linux"))]
+#[cfg_attr(docsrs,doc(cfg(target_os = "linux")))]
+#[doc = " Get the OS Window manager display handle."]
+fn get_display_handle(&self) ->  *const usize {
+        todo!()
+    }
+
+   
+
+    fn remove_parent(&mut self) -> bool {
+        todo!()
+    }
+
     fn set_title(&mut self, _title : &String) -> bool {
         todo!()
     }
 
-    #[inline(always)]
-    fn set_position(&mut self, _position : (i32,i32)) -> bool {
+    fn set_position(&mut self, _option : crate::display::desktop::property::WindowPositionOption) -> bool {
         todo!()
     }
 
-    #[inline(always)]
     fn set_size(&mut self, _size : &(u32,u32)) -> bool {
         todo!()
     }
 
-    #[inline(always)]
     fn show_decoration(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
     fn hide_decoration(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
     fn minimize(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
     fn maximize(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
+    fn set_fullscreen(&mut self, _fsmode : crate::display::desktop::property::FullScreenMode) -> bool {
+        todo!()
+    }
+
     fn enable_autorepeat(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
     fn disable_autorepeat(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
-    fn set_pointer_position(&mut self, _position : &(i32, i32)) -> bool {
+    fn set_pointer_mode(&mut self, _mode : &crate::display::desktop::property::PointerMode) -> bool {
         todo!()
     }
 
-    #[inline(always)]
+    fn set_pointer_position(&mut self, _position : (i32, i32)) -> bool {
+        todo!()
+    }
+
     fn show_pointer(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
     fn hide_pointer(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
     fn confine_pointer(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
     fn release_pointer(&mut self) -> bool {
         todo!()
     }
 
-    #[inline(always)]
-    fn get_window_handle(&self) -> Option<*const usize> {
-        todo!()
-    }  
-
-    #[inline(always)]
-    fn get_display_handle(&self) -> Option<*const usize> {
+    fn set_parent<'manager: 'window>(&mut self, _parent : &'manager Window<'manager>, _option : crate::display::desktop::property::SubWindowOption) -> bool {
         todo!()
     }
+
 
 }
 

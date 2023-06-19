@@ -3,6 +3,7 @@ use std::os::raw::{c_uchar, c_char, c_int, c_long, c_uint, c_ulong};
 
 use super::attributes::{XWindowAttributes, Visual, XSetWindowAttributes, Screen};
 use super::structs::{ XEvent, Atom, XClientMessageEvent, X11Display, X11Handle};
+use super::xkb::XkbDesc;
 
 
 #[link(name = "X11")]
@@ -242,7 +243,12 @@ extern {
     /// <https://www.x.org/releases/X11R7.5/doc/man/man3/XSetWMProtocols.3.html>
     pub(crate) fn XSetWMProtocols(x11display : *mut X11Display, w : *mut X11Handle, protocols : *mut Atom, count : c_int);
 
-    
+    /// XkbGetKeyboard - Retrieves one or more components of a keyboard device description 
+    /// 
+    /// Reference(s)
+    /// <https://www.x.org/releases/X11R7.5/doc/man/man3/XkbGetKeyboard.3.html>
+    pub(crate) fn XkbGetKeyboard(x11display : *mut X11Display, which : c_uint, device_spec : c_uint) -> *const XkbDesc;
+     
 }
 
 // XFixes bindings.

@@ -1,12 +1,18 @@
+use std::cell::RefCell;
 use std::ffi::{CString, c_int};
 use std::panic::catch_unwind;
 use std::ptr::{null_mut};
 use std::thread;
 
+use crate::display::desktop::event::Event;
+use crate::display::desktop::event::keyboard::{Key, KeyIdentity, KEYCODE_IDENTITY, KeyCodeIdentityList};
+use crate::display::desktop::event::window::EventWindow;
 use crate::display::desktop::manager::WindowManager;
-use crate::display::desktop::{event::Event, property::WindowProperty};
+use crate::display::desktop::property::{WindowProperty, SubWindowOption, WindowPositionOption, get_absolute_position_from_relative, PointerMode};
+use crate::display::desktop::window::Window;
 use crate::error::StudioError;
 use self::cbind::structs::XEvent;
+use self::cbind::xkb::{XKB_ALL_COMPONENTS_MASK, XKB_USE_CORE_KBD};
 
 /// Contains X11 C Bind
 pub(crate) mod cbind;
@@ -52,16 +58,29 @@ macro_rules! x11_change_property {
     }
 }
 
+macro_rules! key_identity_matchs {
+    ($str : ident, $keyid : ident $(,$keysid:ident)*) => {
+        match $str.replace("\0", "").as_str() {
+            stringify!($keyid) => KeyIdentity::$keyid,
+            $(stringify!($keysid) => KeyIdentity::$keysid,)*
+            _ => KeyIdentity::NOID,
+        }
+    };
+}
+
 /// Static cache to know if X11 is supported
 #[doc(hidden)]
 pub static mut X11_SUPPORTED : Option<bool> = Option::None;
 
-pub(crate) struct X11WindowManager {
+pub(crate) struct X11WindowManager<'window> {
     /// Used to fetch X11 events
-    pub(crate) x_event : XEvent,    
+    pub(crate) x_event : XEvent,  
+
+    /// Event given as reference
+    event : Event,
 
     /// Retained events that will be sent next poll_event 
-    pub(crate) retained_events : Vec<Event>,
+    pub(crate) retained_events : RefCell<Vec<Event>>,
 
     /// C-compatible string for window title
     wm_title : CString,
@@ -78,63 +97,41 @@ pub(crate) struct X11WindowManager {
     /// Count of event to poll
     pub(crate) event_count : usize,
 
-    /// Keyboard autorepeat
-    pub(crate) auto_repeat : bool,
-
-    /// Window position
-    position : (i32, i32),
-
-    /// Window size
-    size : (u32, u32),
-
-    /// Pointer is confined
-    pub(crate) pointer_confined : bool,
-
-    /// Pointer is visible
-    pub(crate) pointer_visible : bool,
-
-    /// Window is fullscreen
-    pub(crate) fullscreen : bool,
-
-    /// Window is maximized
-    pub(crate) maximized : bool,
-
-    /// Window is minimized
-    pub(crate) minimized : bool,
-
-    /// Window has been created.
-    pub(crate) created : bool,
+    /// [Window] properties
+    pub(super) property : WindowProperty<'window>,
 
     /// Window has been mapped.
     pub(crate) mapped : bool,
 
+    /// Window is fullscreen.
+    pub(crate) fullscreen : bool,   
+
 }
 
-impl WindowManager for X11WindowManager {
+impl<'window> WindowManager<'window> for X11WindowManager<'window> {
     fn new() -> Result<Self, StudioError> {
 
         unsafe{
             let display = XOpenDisplay(std::ptr::null());      // Display connection
             let atoms = X11Atoms::new(display);                         // X11 Atoms
+
+            match KEYCODE_IDENTITY {    // Initialize Keyboard identity
+                Option::None => Self::fill_keycode_identity(display),
+                _ => {}
+            }
             
             Ok(X11WindowManager {
                 x_event: XEvent{ _type:0 }, 
-                retained_events: Vec::new(),
+                retained_events: RefCell::new(Vec::new()),
                 wm_title: CString::new("").unwrap(), 
                 display,
                 window: null_mut(),
                 atoms,
                 event_count: 0,
-                auto_repeat: false,
-                pointer_confined: false,
-                pointer_visible: true,
-                position: (0,0),
-                size: (640,480),
-                fullscreen: false,
-                maximized: false,
-                minimized: false,
-                created : false,
+                property: WindowProperty::new(),
                 mapped: false,
+                fullscreen: false,
+                event: Event::None,
             })
         }
         
@@ -146,43 +143,55 @@ impl WindowManager for X11WindowManager {
     }
 
     #[inline(always)]
-    fn poll_event(&mut self) -> Event  {
+    fn poll_event(&mut self) -> &Event  {
 
-        if self.retained_events.len() > 0 { // Pop event from retained
-            self.retained_events.pop().unwrap() 
+        if self.retained_events.borrow().len() > 0 { // Pop event from retained
+            self.event = self.retained_events.borrow_mut().pop().unwrap();
         } else {
             // Get count to poll
             if self.event_count == 0 {
                 self.sync();
                 self.event_count = self.get_event_count();
             }
-            self.get_event()
+            self.event = self.get_event();
         }
         
+        &self.event
     }
 
-    fn push_event(&mut self, retain: Event){
-        self.retained_events.push(retain);
+    fn push_event(&self, retain: Event){
+        self.retained_events.borrow_mut().push(retain);
     }
 
     #[inline(always)]
-    fn show(&mut self, property : &WindowProperty) {
-        if !self.created {  // Create window if not created
-            self.create_window(property);
+    fn show(&mut self) {
+        if !self.property.created {  // Create window if not created
+            self.create_window();
         } 
         
         if !self.mapped{
-            self.map_window(property);
+            self.map_window();
         }
+    }
+
+    fn recreate(&mut self) {
+        todo!()
+    }
+
+    fn restore(&mut self) {
+        todo!()
     }
 
     #[inline(always)]
     fn close(&mut self) {
         unsafe {
             XDestroyWindow(self.display, self.window);
-            self.created = false;
+            self.property.created = false;
             self.mapped = false;
             self.window = null_mut();   // Delete window pointer.
+
+            // Send closed event to window
+            self.push_event(Event::Window(EventWindow::Closed))
         }
     }
 
@@ -191,12 +200,14 @@ impl WindowManager for X11WindowManager {
         unsafe {
             XUnmapWindow(self.display, self.window);
             self.mapped = false;
+            self.property.visible = false;
         }
     }
 
     #[inline(always)]
     fn set_title(&mut self, title : &String) -> bool {
         unsafe {
+            self.property.title = title.to_string();
             self.wm_title = CString::from_vec_unchecked(title.as_bytes().to_vec());
             XStoreName(self.display, self.window, self.wm_title.as_ptr() as *mut i8);
         }
@@ -204,9 +215,11 @@ impl WindowManager for X11WindowManager {
     }
 
     #[inline(always)]
-    fn set_position(&mut self, position : (i32,i32)) -> bool {
+    fn set_position(&mut self, option : WindowPositionOption) -> bool {
         unsafe {
-            XMoveWindow(self.display, self.window, position.0, position.1);
+            self.property.relative_position = option.clone();
+            self.property.position = get_absolute_position_from_relative(self.property.size, self.property.parent, &option);
+            XMoveWindow(self.display, self.window, self.property.position.0, self.property.position.1);
         }
         false
     }
@@ -220,46 +233,53 @@ impl WindowManager for X11WindowManager {
             XResizeWindow(self.display, self.window, size.0, size.1);
             
             // Reposition window since resize put it back at 0,0
-            self.set_position(position);
-
+            XMoveWindow(self.display, self.window, position.0, position.1);
         }
         false
     }
 
     #[inline(always)]
     fn show_decoration(&mut self) -> bool {
+        self.property.decoration = true;
         true
     }
 
     #[inline(always)]
     fn hide_decoration(&mut self) -> bool {
+        self.property.decoration = false;
         true
     }
 
     #[inline(always)]
     fn minimize(&mut self) -> bool {
+        self.property.minimized = true;
+        self.property.maximized = false;
+        self.property.fullscreen = Option::None;
         true
     }
 
     #[inline(always)]
     fn maximize(&mut self) -> bool {
+        self.property.minimized = false;
+        self.property.maximized = true;
+        self.property.fullscreen = Option::None;
         false
     }
 
     #[inline(always)]
     fn enable_autorepeat(&mut self) -> bool {
-        self.auto_repeat = true;
+        self.property.keyboard.auto_repeat = true;
         false
     }
 
     #[inline(always)]
     fn disable_autorepeat(&mut self) -> bool {
-        self.auto_repeat = false;
+        self.property.keyboard.auto_repeat = false;
         false
     }
 
     #[inline(always)]
-    fn set_pointer_position(&mut self, position : &(i32, i32)) -> bool {
+    fn set_pointer_position(&mut self, position : (i32, i32)) -> bool {
         unsafe {
             XWarpPointer(self.display, self.window, self.window, 0, 0, 
                 0, 0, position.0,  position.1);
@@ -270,10 +290,8 @@ impl WindowManager for X11WindowManager {
     #[inline(always)]
     fn show_pointer(&mut self) -> bool {
         unsafe {
-            if !self.pointer_visible {    // Make sure X hide cursor was called prior to show.
-                XFixesShowCursor(self.display, self.window);
-                self.pointer_visible = true;
-            }       
+            XFixesShowCursor(self.display, self.window);
+            self.property.pointer.visible = true;     
         }
         false
     }
@@ -281,10 +299,8 @@ impl WindowManager for X11WindowManager {
     #[inline(always)]
     fn hide_pointer(&mut self) -> bool {
         unsafe {
-            if self.pointer_visible {
-                self.pointer_visible = false;
-                XFixesHideCursor(self.display, self.window);
-            }
+            self.property.pointer.visible = false;
+            XFixesHideCursor(self.display, self.window);
         }
         false
     }
@@ -292,7 +308,7 @@ impl WindowManager for X11WindowManager {
     #[inline(always)]
     fn confine_pointer(&mut self) -> bool {
         unsafe {
-            self.pointer_confined = true;
+            self.property.pointer.confined = true;
             XGrabPointer(self.display, self.window, true, 
             0, GrabModeAsync.try_into().unwrap(), GrabModeAsync.try_into().unwrap(), self.window, 0, CurrentTime);
         }
@@ -302,7 +318,7 @@ impl WindowManager for X11WindowManager {
     #[inline(always)]
     fn release_pointer(&mut self) -> bool {
         unsafe {
-            self.pointer_confined = false;
+            self.property.pointer.confined = false;
             XUngrabPointer(self.display, CurrentTime);
         }
         false
@@ -318,32 +334,58 @@ impl WindowManager for X11WindowManager {
     }  
 
     #[inline(always)]
-    fn get_display_handle(&self) -> Option<*const usize> {
-        if self.display == null_mut() {
-            Option::None
-        }else {
-            Some(self.display as *const usize)
-        }
+    fn get_display_handle(&self) -> *const usize {
+        self.display as *const usize
+    }
+
+    fn get_properties(&self) -> &WindowProperty {
+        &self.property
+    }
+
+    fn set_parent<'manager: 'window>(&mut self, parent : &'manager Window<'manager>, option : SubWindowOption) -> bool {
+        self.property.parent = Some((parent, option));
+        false
+    }
+
+    fn remove_parent(&mut self) -> bool {
+        self.property.parent = Option::None;
+        false
+    }
+
+    
+
+    fn set_fullscreen(&mut self, fsmode : crate::display::desktop::property::FullScreenMode) -> bool {
+        self.property.fullscreen = Some(fsmode);
+        true
+    }
+
+    fn set_pointer_mode(&mut self, mode : &crate::display::desktop::property::PointerMode) -> bool {
+        match mode {
+            PointerMode::Acceleration => self.set_pointer_position(self.property.center),
+            _ => false,
+        };
+        self.property.pointer.mode = *mode;
+        false
     }
 
     
 }
 
 
-impl X11WindowManager {
+impl<'window> X11WindowManager<'window> {
 
     /// Create the window according to window properties.
     #[inline(always)]
-    fn create_window(&mut self, property : &WindowProperty){
+    fn create_window(&mut self){
         unsafe {
             // Get root window according to parent.
-            let root = match &property.parent{
-                Some(parent) => parent.borrow().get_window_handle().unwrap() as *mut u64,
+            let root = match &self.property.parent {
+                Some(parent) => parent.0.manager.get_window_handle().unwrap() as *mut u64,
                 Option::None => Self::get_x11_default_root_window(self.display),
             };
 
-            self.window = XCreateSimpleWindow(self.display, root, property.position.0,property.position.1,
-                property.size.0, property.size.1, 0, 0, 0);
+            self.window = XCreateSimpleWindow(self.display, root, self.property.position.0,self.property.position.1,
+                self.property.size.0, self.property.size.1, 0, 0, 0);
 
             // Set window Type to normal
             x11_change_property!(self.display, self.window, self.atoms, _NET_WM_WINDOW_TYPE, _NET_WM_WINDOW_TYPE_NORMAL);
@@ -355,7 +397,7 @@ impl X11WindowManager {
             x11_change_property!(self.display, self.window, self.atoms, _NET_WM_ALLOWED_ACTIONS, _NET_WM_ACTION_FULLSCREEN, _NET_WM_ACTION_MINIMIZE, _NET_WM_ACTION_CHANGE_DESKTOP,
                 _NET_WM_ACTION_CLOSE, _NET_WM_ACTION_ABOVE, _NET_WM_ACTION_BELOW);
 
-            match &property.fullscreen{
+            match &self.property.fullscreen{
                 Some(_) => {
                     // TODO: Set fullscreen according to mode.
                     // Set as fullscreen
@@ -372,26 +414,26 @@ impl X11WindowManager {
             XFlush(self.display);
 
             // Set window created flag to true.
-            self.created = true;
+            self.property.created = true;
+
+            // Send created event to window
+            self.push_event(Event::Window(EventWindow::Created))
         }
     }
 
     /// Map the window according to window properties.
     #[inline(always)]
-    fn map_window(&mut self, property : &WindowProperty){
-        match &property.parent{
+    fn map_window(&mut self){
+        match &self.property.parent{
             Some(parent) => {
-                match property.subwindow_option {
-                    Some(option) => match option{
-                        crate::display::desktop::property::SubWindowOption::Normal =>  unsafe { XMapWindow(self.display, self.window) },
-                        crate::display::desktop::property::SubWindowOption::Top =>  unsafe { XMapRaised(self.display, self.window) },
-                        crate::display::desktop::property::SubWindowOption::Modal => {
-                            unsafe { XMapRaised(self.display, self.window) }
-                            // Lock parent
-                            parent.borrow_mut().property.locked = true;
-                        },
+                match parent.1 {
+                    SubWindowOption::Normal => unsafe { XMapWindow(self.display, self.window) },
+                    SubWindowOption::Top => unsafe { XMapRaised(self.display, self.window) },
+                    SubWindowOption::Modal =>  {
+                        unsafe { XMapRaised(self.display, self.window) }
+                        // Send modal showed to parent
+                       parent.0.manager.push_event(Event::Window(EventWindow::ModalShowed));
                     },
-                    Option::None => unsafe { XMapWindow(self.display, self.window) },
                 }
             },
             Option::None => unsafe { XMapWindow(self.display, self.window) },
@@ -399,6 +441,7 @@ impl X11WindowManager {
 
         self.mapped = true;
     }
+
 
     /// Get default root window of display
     fn get_x11_default_root_window(display : *mut X11Handle) -> *mut X11Handle {
@@ -478,9 +521,39 @@ impl X11WindowManager {
             }        
         }
     }
+
+
+
+    /// Fill keycode identities link.
+    #[inline(always)]
+    fn fill_keycode_identity(display : *mut X11Display){
+        unsafe {
+            let xkb =  XkbGetKeyboard(display, XKB_ALL_COMPONENTS_MASK, XKB_USE_CORE_KBD);
+            let mut list: Box<[KeyIdentity;u8::MAX as usize]>  = Box::new([KeyIdentity::NOID;u8::MAX as usize]);
+            
+            for i in 0..(*xkb).max_key_code {
+                //let str = std::ffi::CStr::from_ptr(((*(*(*xkb).names).keys.offset(i as isize)).name).as_ptr());
+                let a = (*(*(*xkb).names).keys.offset(i as isize)).name;
+
+                let str = String::from_utf8(a.iter().map(|&c| c as u8).collect()).unwrap();
+                let str = str.replace("\0", "");
+            
+                list[i as usize] = match String::from_utf8(a.iter().map(|&c| c as u8).collect()){
+                    Ok(str) => key_identity_matchs!{str, ESC,FK01,FK02,FK03,FK04,FK05,FK06,FK07,FK08,FK09,FK10,FK11,FK12,PRSC,SCLK,PAUS,TLDE,AE01,AE02,AE03,AE04,AE05,AE06,AE07,AE08,AE09,AE10,AE11,AE12,
+                        BKSP,TAB,AD01,AD02,AD03,AD04,AD05,AD06,AD07,AD08,AD09,AD10,AD11,AD12,BKSL,CAPS,AC01,AC02,AC03,AC04,AC05,AC06,AC07,AC08,AC09,AC10,AC11,RTRN,LFSH,
+                        AB01,AB02,AB03,AB04,AB05,AB06,AB07,AB08,AB09,AB10,RTSH,LCTL,LALT,SPCE,RALT,RCTL,INS,HOME,PGUP,DELE,END,PGDN,UP,LEFT,DOWN,RGHT,NMLK,KPDV,
+                        KPMU,KPSU,KPAD,KPEN,KPDL,KP0,KP1,KP2,KP3,KP4,KP5,KP6,KP7,KP8,KP9},
+                    Err(_) => KeyIdentity::NOID,
+                };
+                println!("{} = {:?} = {:?}", i, list[i as usize], str);
+            }
+
+            KEYCODE_IDENTITY = Some(KeyCodeIdentityList::new(list));
+        }
+    }
 }
 
-impl Drop for X11WindowManager {
+impl<'window> Drop for X11WindowManager<'window> {
     fn drop(&mut self) {
         unsafe {
             // Close display server connection.

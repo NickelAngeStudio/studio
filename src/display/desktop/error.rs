@@ -20,7 +20,7 @@ pub enum DisplayError {
     ParentSameAsSub,
 
     /// Happens when trying to make a target child window it's parent.
-    ParentIsSubOfWindow,
+    ParentIsParent,
 
     /// Happens when trying to show a window with a position relative to a parent but no parent is specified.
     PositionNoParent,
