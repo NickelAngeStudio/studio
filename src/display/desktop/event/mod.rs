@@ -11,7 +11,7 @@ pub mod pointer;
 pub mod gamepad;
 
 /// Union of possible events into an enumeration.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Event {
 
     /// No event.

@@ -1,4 +1,3 @@
-use cfg_boost::target_cfg;
 use studio::display::desktop::{window::{Window}, property::{WindowPropertySet, KeyboardPropertySet}};
 
 use crate::{display::desktop::{ rsrcs::{main_loop}}, tools::{RESET_CONSOLE, BLUE_CONSOLE}};
@@ -23,9 +22,9 @@ pub fn test_keyboard(){
     main_loop(&mut window, &mut hold_different_keys::HoldDifferentKeys::new());
 
     // Auto-repeat
-    window.set_property(&WindowPropertySet::Keyboard(KeyboardPropertySet::EnableAutoRepeat)).expect("");
-    main_loop(&mut window, &mut auto_repeat_space::AutoRepeatSpace::new());
-    window.set_property(&WindowPropertySet::Keyboard(KeyboardPropertySet::DisableAutoRepeat)).expect("");
+    //window.set_property(&WindowPropertySet::Keyboard(KeyboardPropertySet::EnableAutoRepeat)).expect("");
+    //main_loop(&mut window, &mut auto_repeat_space::AutoRepeatSpace::new());
+    //window.set_property(&WindowPropertySet::Keyboard(KeyboardPropertySet::DisableAutoRepeat)).expect("");
     
 
     println!("{}{}{}", BLUE_CONSOLE, "... keyboard event tests ended ...", RESET_CONSOLE);
@@ -44,7 +43,7 @@ mod hold_space {
 
     use studio::display::desktop::event::{Event, keyboard::{EventKeyboard, KeyIdentity}};
 
-    use crate::{display::desktop::rsrcs::EventReceiver, tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}};
+    use crate::{display::desktop::rsrcs::{EventReceiver, SPACE_KEY_VALUE}, tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}};
 
     const HOLD_TIME_SEC:u64 = 5;  // Count of seconds to hold bar
 
@@ -71,19 +70,19 @@ mod hold_space {
             if let Event::Keyboard(kb_event) = event {
                 match kb_event {
                     EventKeyboard::KeyDown(key) => {
-                        println!("KD={:?}", key.identity());
-                        if key.identity() == KeyIdentity::SPCE {
+                        if *key == SPACE_KEY_VALUE {
                             println!("{}{}{}", BLUE_CONSOLE, "Space is now down ...", RESET_CONSOLE);
                             self.space_pressed = true;
                             self.duration = Instant::now();
                         }
                     },
                     EventKeyboard::KeyUp(key) => {
-                        if key.identity() == KeyIdentity::SPCE {
+                        if *key == SPACE_KEY_VALUE {
                             println!("{}{}{}", BLUE_CONSOLE, "Space is released too soon, try again ...", RESET_CONSOLE);
                             self.space_pressed = false;
                         }
                     },
+                    _ => {},
                 }
             }
 
@@ -105,7 +104,7 @@ mod hold_space {
             if let Event::Keyboard(kb_event) = event {
                 // Verify if space key was released.
                 if let EventKeyboard::KeyUp(key) = kb_event {
-                    if key.identity() == KeyIdentity::SPCE {
+                    if *key == SPACE_KEY_VALUE {
                         self.is_done = true;
                     }
                 }
@@ -152,7 +151,7 @@ mod different_keys{
     /// Struct that test pressing multiples differents keys
     pub struct DifferentKeys {
         is_done: bool,          // Is the test finished.
-        keymap : HashMap<u8, usize>,
+        keymap : HashMap<u32, usize>,
         almost_done_msg:bool,   // Indicate if almost done is printed
     }
 
@@ -174,16 +173,16 @@ mod different_keys{
 
             if let Event::Keyboard(kb_event) = event {
                 match kb_event {
-                    EventKeyboard::KeyDown(key) => {
-                        if !self.keymap.contains_key(&key.keycode) {
+                    EventKeyboard::KeyDown(keycode) => {
+                        if !self.keymap.contains_key(keycode) {
                             self.almost_done_msg = false;
-                            self.keymap.insert(key.keycode, 1);
+                            self.keymap.insert(*keycode, 1);
                         } else {
                             println!("{}{}{}", BLUE_CONSOLE, "You already pressed that key!", RESET_CONSOLE);
                         }
                        
                     },
-                    EventKeyboard::KeyUp(_) => {},
+                    _ => {},
                 }
             }
 
@@ -222,7 +221,7 @@ mod hold_different_keys{
     /// Struct that test holding space bar as an Event Receiver.
     pub struct HoldDifferentKeys {
         is_done: bool,          // Is the test finished.
-        keymap : HashMap<u8, usize>,
+        keymap : HashMap<u32, usize>,
         duration : Instant,     // Duration of press
         key_valid:bool,         // True if keys are valid
         print_msg:bool,     // Verify if we print a message
@@ -294,13 +293,14 @@ mod hold_different_keys{
             if let Event::Keyboard(kb_event) = event {
                 self.print_msg = true;
                 match kb_event {
-                    EventKeyboard::KeyDown(key) => {
-                        self.keymap.insert(key.keycode, 1);
+                    EventKeyboard::KeyDown(keycode) => {
+                        self.keymap.insert(*keycode, 1);
                        
                     },
-                    EventKeyboard::KeyUp(key) => {
-                        self.keymap.insert(key.keycode, 0);
+                    EventKeyboard::KeyUp(keycode) => {
+                        self.keymap.insert(*keycode, 0);
                     },
+                    _ => {},
                 }
             }
             
@@ -326,7 +326,7 @@ mod auto_repeat_space {
 
     use studio::display::desktop::event::{Event, keyboard::{EventKeyboard, KeyIdentity}};
 
-    use crate::{display::desktop::rsrcs::EventReceiver, tools::{YELLOW_CONSOLE, RESET_CONSOLE}};
+    use crate::{display::desktop::rsrcs::{EventReceiver, SPACE_KEY_VALUE}, tools::{YELLOW_CONSOLE, RESET_CONSOLE}};
 
     const SPACE_BAR_COUNT:usize = 300;  // Count of spacebar press needed to finish (about 5 secs)
 
@@ -349,8 +349,8 @@ mod auto_repeat_space {
 
         if let Event::Keyboard(kb_event) = event {
             // Verify if space key was released.
-            if let EventKeyboard::KeyUp(key) = kb_event {
-                if key.identity() == KeyIdentity::SPCE {
+            if let EventKeyboard::KeyUp(keycode) = kb_event {
+                if *keycode == SPACE_KEY_VALUE {
                     self.press_count+=1;    // Increment press count
                 }
             }

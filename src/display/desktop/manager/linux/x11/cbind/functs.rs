@@ -1,9 +1,11 @@
+use std::ffi::c_void;
 // Contains bindings for XLib
 use std::os::raw::{c_uchar, c_char, c_int, c_long, c_uint, c_ulong};
 
 use super::attributes::{XWindowAttributes, Visual, XSetWindowAttributes, Screen};
-use super::structs::{ XEvent, Atom, XClientMessageEvent, X11Display, X11Handle};
-use super::xkb::XkbDesc;
+use super::structs::{ XEvent, Atom, XClientMessageEvent, X11Display, X11Handle, XKeyPressedEvent, XKeyEvent};
+use super::xinput::{XIM, XIMStyles, XIMStyle, XIC};
+use super::xkb::{XkbDesc, X11Keysim};
 
 
 #[link(name = "X11")]
@@ -162,7 +164,7 @@ extern {
     /// 
     /// Reference(s)
     /// <https://www.x.org/releases/X11R7.7/doc/libX11/libX11/libX11.html#XFree>
-    pub(crate) fn XFree(data : *mut c_char);
+    pub(crate) fn XFree(data : *mut c_void);
 
     /// The XGetWindowAttributes function returns the current attributes for the specified x11window to an XWindowAttributes structure. 
     /// 
@@ -248,7 +250,73 @@ extern {
     /// Reference(s)
     /// <https://www.x.org/releases/X11R7.5/doc/man/man3/XkbGetKeyboard.3.html>
     pub(crate) fn XkbGetKeyboard(x11display : *mut X11Display, which : c_uint, device_spec : c_uint) -> *const XkbDesc;
-     
+
+
+    /// XkbKeycodeToKeysym - Finds the keysym bound to a particular key at a specified group and shift level.
+    /// 
+    /// Reference(s)
+    /// <https://www.x.org/releases/X11R7.5/doc/man/man3/XkbKeycodeToKeysym.3.html>
+    pub(crate) fn XkbKeycodeToKeysym(x11display : *mut X11Display, keycode : c_uchar, group : c_uint, level : c_uint) -> X11Keysim;
+
+
+    /// Convert keysim to string.  If the specified KeySym is not defined, XKeysymToString() returns a NULL. 
+    /// 
+    /// Reference(s)
+    /// <https://tronche.com/gui/x/xlib/utilities/keyboard/XKeysymToString.html>
+    pub(crate) fn XKeysymToString(keysym : X11Keysim) -> *const c_char;
+
+    /// The XLookupString() function translates a key event to a KeySym and a string. 
+    /// 
+    /// Reference(s)
+    /// <https://tronche.com/gui/x/xlib/utilities/XLookupString.html>
+    pub(crate) fn XLookupString(event_struct : *const XKeyEvent, buffer_return : *mut c_uchar, 
+        bytes_buffer : c_int, keysym_return : *mut X11Keysim, status_in_out : *mut c_void) -> c_int;
+
+    /// If XFilterEvent returns True, then some input method has filtered the event, and the client should discard the event.
+    /// 
+    /// Reference(s)
+    /// <https://linux.die.net/man/3/xfilterevent>
+    pub(crate) fn  XFilterEvent(event : *const XEvent, w : c_long) -> bool; 
+
+    /// The XOpenIM function opens an input method, matching the current locale and modifiers specification. 
+    /// Current locale and modifiers are bound to the input method at opening time. 
+    /// The locale associated with an input method cannot be changed dynamically.
+    /// 
+    /// Reference(s)
+    /// <https://www.x.org/releases/current/doc/man/man3/XOpenIM.3.xhtml>
+    pub(crate) fn XOpenIM(x11display : *mut X11Display, db : c_uint, res_name : *mut c_char, res_class : *mut c_char) -> XIM;
+
+
+    /// The XGetIMValues function presents a variable argument list programming interface for querying properties or features
+    /// of the specified input method. This function returns NULL if it succeeds; otherwise, it returns the name of the 
+    /// first argument that could not be obtained.
+    /// 
+    /// Reference(s)
+    /// <https://www.x.org/releases/current/doc/man/man3/XOpenIM.3.xhtml>
+    pub(crate) fn XGetIMValues(xInputMethod : XIM, input_style : *const c_char, styles : *mut *mut XIMStyles, null : * mut c_void) -> * mut c_char;
+	
+
+    /// The XCreateIC function creates a context within the specified input method. 
+    /// 
+    /// Reference(s)
+    /// <https://www.x.org/releases/X11R7.5/doc/man/man3/XIMOfIC.3.html>
+    pub(crate) fn XCreateIC(xInputMethod : XIM, input_style : *const c_char, bestMatchStyle : XIMStyle, 
+        client_window : *const c_char, w_client : *mut X11Handle, focus_window : *const c_char, w_focus : *mut X11Handle, null : * mut c_void) -> XIC;
+
+    /// The XmbLookupString, XwcLookupString and Xutf8LookupString functions return the string from the input method 
+    /// specified in the buffer_return argument. If no string is returned, the buffer_return argument is unchanged. 
+    /// 
+    /// Reference(s)
+    pub(crate) fn Xutf8LookupString(ic : XIC, event : *const XKeyPressedEvent, buffer_return : *mut c_char, bytes_buffer : c_int, 
+        keysym_return : *mut X11Keysim, status_return : *mut c_int) -> c_int; 
+
+
+    /// The XSetICFocus function allows a client to notify an input method that the focus window attached 
+    /// to the specified input context has received keyboard focus
+    /// 
+    /// Reference(s)
+    /// <https://www.x.org/releases/X11R7.5/doc/man/man3/XSetICFocus.3.html>
+    pub(crate) fn XSetICFocus(ic : XIC);
 }
 
 // XFixes bindings.

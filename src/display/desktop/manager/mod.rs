@@ -4,7 +4,7 @@ use cfg_boost::target_cfg;
 
 use crate::error::StudioError;
 
-use super::{property::{WindowProperty, SubWindowOption, WindowPositionOption, FullScreenMode, PointerMode}, event::{Event, keyboard::{KeyIdentity, Key}}, Window};
+use super::{property::{WindowProperty, SubWindowOption, WindowPositionOption, FullScreenMode, PointerMode, KeyboardMode, WindowEventWaitMode}, event::{Event}, Window};
 
 /// Enumeration of [Display server](https://en.wikipedia.org/wiki/Windowing_system#Display_server)
 /// and/or [Window manager](https://en.wikipedia.org/wiki/Window_manager) providers.
@@ -107,15 +107,15 @@ pub trait WindowManager<'window> {
     /// Maximize window.
     fn maximize(&mut self) -> bool;
 
+    /// Set the [WindowEventWaitMode].
+    fn set_event_wait_mode(&mut self, mode : WindowEventWaitMode) -> bool;
+
     /// Setting window fullscreen trigger 
     /// window recreate.
     fn set_fullscreen(&mut self, fsmode : FullScreenMode) -> bool;
 
-    /// Enable keyboard key auto-repeat when hold.
-    fn enable_autorepeat(&mut self) -> bool;
-
-    /// Disable keyboard key auto-repeat when hold.
-    fn disable_autorepeat(&mut self) -> bool;
+    /// Set keyboard mode.
+    fn set_keyboard_mode(&mut self, mode : KeyboardMode) -> bool;
 
     /// Set the pointer mode.
     fn set_pointer_mode(&mut self, mode : &PointerMode) -> bool;
@@ -135,5 +135,40 @@ pub trait WindowManager<'window> {
     /// Release the pointer from window boundaries, allowing escape.
     fn release_pointer(&mut self) -> bool;
 
+    /*********
+    * STATIC *
+    *********/
+    /// Return true if state indicate either left or right shift were down.
+    fn is_key_shift_down(state : u32) -> bool;
+
+    /// Return true if state indicate either left or right ctrl were down.
+    fn is_key_ctrl_down(state : u32) -> bool;
+
+    /// Return true if state indicate either left or right alt were down.
+    fn is_key_alt_down(state : u32) -> bool;
+
+    /// Return true if state indicate either left or right meta were down.
+    /// 
+    /// Reference(s)
+    /// https://askubuntu.com/questions/19558/what-are-the-meta-super-and-hyper-keys
+    fn is_key_meta_down(state : u32) -> bool;
+
+    /// Return true if state indicate either left or right super(command) were down.
+    /// 
+    /// Reference(s)
+    /// https://askubuntu.com/questions/19558/what-are-the-meta-super-and-hyper-keys
+    fn is_key_command_down(state : u32) -> bool;
+
+    //// Return true if state indicate either left or right shift hyper down.
+    /// 
+    /// Reference(s)
+    /// https://askubuntu.com/questions/19558/what-are-the-meta-super-and-hyper-keys
+    fn is_key_hyper_down(state : u32) -> bool;
+
+    /// Return true if state indicate that capslock was enabled.
+    fn is_capslock_on(state : u32) -> bool;
+
+    /// Return true if state indicate that numlock was enabled.
+    fn is_numlock_on(state : u32) -> bool;
 
 }

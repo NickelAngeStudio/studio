@@ -1,6 +1,6 @@
 //! Log window receiver that output all event received to the console.
 
-use studio::display::desktop::{event::Event, Window};
+use studio::display::desktop::{event::{Event, keyboard::EventKeyboard}, Window, property::{WindowProperty, WindowPropertySet, WindowEventWaitMode, KeyboardPropertySet, KeyboardMode}};
 
 use crate::{tools::{BLUE_CONSOLE, RESET_CONSOLE}, display::desktop::rsrcs::main_loop};
 
@@ -10,6 +10,8 @@ use super::rsrcs::EventReceiver;
 pub fn log_window(){
 
     let mut window = Window::new().unwrap();
+    window.set_properties(&[WindowPropertySet::SetEventWaitMode(WindowEventWaitMode::AlwaysWait),
+    WindowPropertySet::Keyboard(KeyboardPropertySet::SetMode(KeyboardMode::TextInput))]).unwrap();
 
     window.show();
 

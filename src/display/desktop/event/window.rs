@@ -1,6 +1,6 @@
 
 /// Enumeration of possible events for a window
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum EventWindow {
 
     /// Happens when window is created.

@@ -1,7 +1,7 @@
 //! Linux implementations of [WindowManager].
 
-use crate::{display::{ desktop::{ manager::WindowManager, window::{  Window}, event::{Event, keyboard::{Key, KeyIdentity}}, property::{WindowProperty, SubWindowOption, WindowPositionOption}}, DisplayError}, error::StudioError};
-use self::{wayland::WaylandWindowManager, x11::X11WindowManager};
+use crate::{display::{ desktop::{ manager::WindowManager, window::{  Window}, event::{Event, keyboard::Key}, property::{WindowProperty, SubWindowOption, WindowPositionOption, KeyboardMode, WindowEventWaitMode}}, DisplayError}, error::StudioError};
+use self::{wayland::{WaylandWindowManager, WAYLAND_SUPPORTED}, x11::X11WindowManager};
 use super::WindowProvider;
 
 /// Wayland DisplayManager
@@ -33,6 +33,23 @@ macro_rules! wmfn {
         }
     };
 }
+
+/// Macro that redirect function to correct window manager for static call. 
+macro_rules! static_wmfn {
+    ($funct : ident ( $($param : tt)* )) => {
+        match unsafe { WAYLAND_SUPPORTED } {
+            Some(supported) => if supported {
+                WaylandWindowManager::$funct($($param)*)
+            } else {
+                X11WindowManager::$funct($($param)*)
+            },
+            None => X11WindowManager::$funct($($param)*),
+        } 
+    };
+}
+
+
+
 
 pub struct LinuxWindowManager<'window> {
     wm : ImplementedLinuxWindowManager<'window>,
@@ -85,6 +102,13 @@ impl<'window> WindowManager<'window> for LinuxWindowManager<'window> {
     }
 
     #[inline(always)]
+    fn set_event_wait_mode(&mut self, mode : WindowEventWaitMode) -> bool {
+        wmfn!(mut self, set_event_wait_mode(mode))
+    }
+
+    
+
+    #[inline(always)]
     fn set_title(&mut self, title : &String) -> bool {
          wmfn!(mut self, set_title(title))
     }
@@ -120,13 +144,8 @@ impl<'window> WindowManager<'window> for LinuxWindowManager<'window> {
     }
 
     #[inline(always)]
-    fn enable_autorepeat(&mut self) -> bool {
-         wmfn!(mut self, enable_autorepeat())
-    }
-
-    #[inline(always)]
-    fn disable_autorepeat(&mut self) -> bool {
-         wmfn!(mut self, disable_autorepeat())
+    fn set_keyboard_mode(&mut self, mode : KeyboardMode) -> bool {
+         wmfn!(mut self, set_keyboard_mode(mode))
     }
 
     #[inline(always)]
@@ -192,4 +211,54 @@ impl<'window> WindowManager<'window> for LinuxWindowManager<'window> {
         wmfn!(mut self, set_pointer_mode(mode))
     }
 
+    fn is_key_shift_down(state : u32) -> bool {
+        static_wmfn!(is_key_shift_down(state))
+    }
+
+    fn is_key_ctrl_down(state : u32) -> bool {
+        static_wmfn!(is_key_ctrl_down(state))
+    }
+
+    fn is_key_alt_down(state : u32) -> bool {
+        static_wmfn!(is_key_alt_down(state))
+    }
+
+    fn is_key_meta_down(state : u32) -> bool {
+        static_wmfn!(is_key_meta_down(state))
+    }
+
+    fn is_key_command_down(state : u32) -> bool {
+        static_wmfn!(is_key_command_down(state))
+    }
+
+    fn is_key_hyper_down(state : u32) -> bool {
+        static_wmfn!(is_key_hyper_down(state))
+    }
+
+    fn is_capslock_on(state : u32) -> bool {
+        static_wmfn!(is_capslock_on(state))
+    }
+
+    fn is_numlock_on(state : u32) -> bool {
+        static_wmfn!(is_numlock_on(state))
+    }
+
+    
+
+
 }
+
+/*
+impl<'window> LinuxWindowManager<'window> {
+    pub fn get_char(key : &Key) -> Option<char> {
+        match unsafe { WAYLAND_SUPPORTED } {
+            Some(supported) => if supported {
+                WaylandWindowManager::get_char(key)
+            } else {
+                X11WindowManager::get_char(key)
+            },
+            None => X11WindowManager::get_char(key),
+        } 
+    }
+}
+*/

@@ -20,6 +20,20 @@ pub const DEFAULT_WIDTH : u32 = 640;
 /// Default [Window] height.
 pub const DEFAULT_HEIGHT : u32 = 480;
 
+
+/// [Window] event wait mode.
+#[derive(Debug, Copy, Clone)]
+pub enum WindowEventWaitMode {
+    /// This mode is more suitable for games and interfaces that must refresh
+    /// often. This mode is MANDATORY if you want to achieve [IMMEDIATE](https://en.wikipedia.org/wiki/Immediate_mode_GUI) user interfaces.
+    NeverWait,
+
+    /// This mode will lock the window thread until an event occurred. Takes way less
+    /// computing power and is suited for applications. This mode is MANDATORY if you want to 
+    /// achieve [RETAINED](https://en.wikipedia.org/wiki/Retained_mode) user interfaces.
+    AlwaysWait,
+}
+
 /// [Window] fullscreen mode enumeration.
 #[derive(Clone)]
 pub enum FullScreenMode {
@@ -59,12 +73,8 @@ pub enum WindowPositionOption {
 /// Contains keyboard properties that can be set.
 pub enum KeyboardPropertySet {
 
-    /// Key will be repeated when pressed down.
-    EnableAutoRepeat,
-
-
-    /// Key won't be repeated when pressed down.
-    DisableAutoRepeat,
+    /// Set [KeyboardMode].
+    SetMode(KeyboardMode),
 
 }
 
@@ -128,6 +138,9 @@ pub enum WindowPropertySet<'window> {
     /// Note : A window cannot be it's own parent nor can it become the subwindow of his subwindows.
     SetParent(&'window Window<'window>, SubWindowOption),
 
+    /// Set the window event wait mode.
+    SetEventWaitMode(WindowEventWaitMode),
+
     /// Remove window from parent, making it a parentless window.
     RemoveParent,
 
@@ -177,6 +190,9 @@ pub struct WindowProperty<'window> {
 
     /// Window pointer properties
     pub keyboard : KeyboardProperty,
+
+    /// Window event wait mode
+    pub wait_mode : WindowEventWaitMode,
 
     /// Window title
     pub title : String,
@@ -233,6 +249,7 @@ impl<'window> WindowProperty<'window>{
             locked: false,
             relative_position: WindowPositionOption::Desktop((0,0)),
             parent: None,
+            wait_mode: WindowEventWaitMode::NeverWait,  // Never wait by default to prevent new user confusion.
         }
     }
     
@@ -252,19 +269,30 @@ impl<'window> WindowProperty<'window>{
 
 }
 
+/// Enumeration of possible keyboard mode for input.
+#[derive(Debug, Clone, Copy)]
+pub enum KeyboardMode {
+    /// Direct mode is faster and more suitable for games. Provides [EventKeyboard::KeyUp](super::event::keyboard::EventKeyboard)
+    /// and [EventKeyboard::KeyDown](super::event::keyboard::EventKeyboard) and disable auto-repeat.
+    DirectInput,
+
+    /// Text mode is slower since it provides more information for text entry. Provides [EventKeyboard::KeyPress](super::event::keyboard::EventKeyboard)
+    /// and enable auto-repeat.
+    TextInput,
+}
 
 /// Contains keyboard properties.
 pub struct KeyboardProperty {
 
-    /// If true, key will be repeated when pressed down.
-    pub auto_repeat:bool,
+    /// [KeyboardMode] of the keyboard. Use [KeyboardMode::DirectInput] by default.
+    pub mode:KeyboardMode,
 
 }
 
 impl KeyboardProperty {
     /// Create new instance of keyboard property with auto repeat to false.
     pub(crate) fn new() -> KeyboardProperty {
-        KeyboardProperty { auto_repeat:false }
+        KeyboardProperty { mode : KeyboardMode::DirectInput }
     }
 }
 

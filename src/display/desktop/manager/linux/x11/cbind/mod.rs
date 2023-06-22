@@ -19,3 +19,9 @@ pub mod structs;
 #[allow(unused)]                    // Remove unused variable notification
 #[allow(non_snake_case)]            // Imported C members aren't formatted according to convention.
 pub mod xkb;
+
+// Contains xinput struct definition.
+#[allow(unused)]                    // Remove unused variable notification
+#[allow(non_snake_case)]            // Imported C members aren't formatted according to convention.
+#[allow(non_upper_case_globals)]    // Imported C global aren't formatted according to convention.
+pub mod xinput;

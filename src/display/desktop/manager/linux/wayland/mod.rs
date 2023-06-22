@@ -1,4 +1,4 @@
-use crate::{display::desktop::{manager::WindowManager, manager::WindowProvider, Window, event::keyboard::{Key, KeyIdentity}}, error::StudioError};
+use crate::{display::desktop::{manager::WindowManager, manager::WindowProvider, Window, event::keyboard::Key, property::{KeyboardMode, WindowEventWaitMode}}, error::StudioError};
 
 /// Static cache to know if wayland is supported
 #[doc(hidden)]
@@ -20,6 +20,10 @@ impl WaylandWindowManager {
             },
         }
         
+    }
+
+    pub fn get_char(key : &Key) -> Option<char> {
+        todo!()
     }
 }
 
@@ -110,15 +114,16 @@ fn get_display_handle(&self) ->  *const usize {
         todo!()
     }
 
+    #[inline(always)]
+    fn set_event_wait_mode(&mut self, mode : WindowEventWaitMode) -> bool {
+        todo!()
+    }
+
     fn set_fullscreen(&mut self, _fsmode : crate::display::desktop::property::FullScreenMode) -> bool {
         todo!()
     }
 
-    fn enable_autorepeat(&mut self) -> bool {
-        todo!()
-    }
-
-    fn disable_autorepeat(&mut self) -> bool {
+    fn set_keyboard_mode(&mut self, _mode : KeyboardMode) -> bool {
         todo!()
     }
 
@@ -147,6 +152,38 @@ fn get_display_handle(&self) ->  *const usize {
     }
 
     fn set_parent<'manager: 'window>(&mut self, _parent : &'manager Window<'manager>, _option : crate::display::desktop::property::SubWindowOption) -> bool {
+        todo!()
+    }
+
+    fn is_key_shift_down(state : u32) -> bool {
+        todo!()
+    }
+
+    fn is_key_ctrl_down(state : u32) -> bool {
+        todo!()
+    }
+
+    fn is_key_alt_down(state : u32) -> bool {
+        todo!()
+    }
+
+    fn is_key_meta_down(state : u32) -> bool {
+        todo!()
+    }
+
+    fn is_key_command_down(state : u32) -> bool {
+        todo!()
+    }
+
+    fn is_key_hyper_down(state : u32) -> bool {
+        todo!()
+    }
+
+    fn is_capslock_on(state : u32) -> bool {
+        todo!()
+    }
+
+    fn is_numlock_on(state : u32) -> bool {
         todo!()
     }
 

@@ -1,8 +1,12 @@
 //! Structs used to fetch identities of Keycodes
 
-use std::ffi::{c_ushort, c_uchar, c_char};
+use std::ffi::{c_ushort, c_uchar, c_char, c_uint};
 
 use super::structs::{X11Display, XID, Atom};
+
+/// Keysim is used to fetch char value.
+pub type X11Keysim = c_uint;
+
 
 const XKB_KEY_NAME_LENGTH : usize = 4;
 const XKB_NUM_INDICATORS : usize = 32;

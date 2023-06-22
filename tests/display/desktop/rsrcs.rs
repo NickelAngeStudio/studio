@@ -57,7 +57,8 @@ impl EventReceiver for SpaceReceiver{
         match event {
             Event::Keyboard(kb_event) => match kb_event {
                 EventKeyboard::KeyDown(key) 
-                | EventKeyboard::KeyUp(key) => self.finished = self.finished || ( key.identity() == KeyIdentity::SPCE ),
+                | EventKeyboard::KeyUp(key) => self.finished = self.finished || ( *key == SPACE_KEY_VALUE ),
+                EventKeyboard::KeyPress(key) => println!("Key={:?}", key),
             },
             _ => {},
         }
@@ -89,11 +90,10 @@ pub fn main_loop(window: &mut Window, receiver: &mut dyn EventReceiver){
             match event {
                 Event::Keyboard(kb_event) => match kb_event {
                     EventKeyboard::KeyDown(key) => 
-                    {        
-                        match key.identity() {
-                            KeyIdentity::ESC => exit(1),    // Exit and fail test
-                            _ => {},
-                        }
+                    {      
+                        if *key == ESC_KEY_VALUE {
+                            exit(1);    // Exit and fail test
+                        }  
                     },
                     _ => {},
                 },

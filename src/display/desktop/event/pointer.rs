@@ -1,6 +1,6 @@
 
 /// Enumeration of possible pointer buttons
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum PointerButton {
     /// Left button of a pointer device.
     LeftButton,
@@ -35,7 +35,7 @@ pub enum PointerButton {
 
 
 /// Enumeration of possible pointer events
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum EventPointer {
 
     /// Pointer move event. Provides new (x, y) position. Only when in pointer mode.

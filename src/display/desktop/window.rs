@@ -12,6 +12,7 @@ use super::property::KeyboardPropertySet;
 use super::property::PointerMode;
 use super::property::PointerPropertySet;
 use super::property::SubWindowOption;
+use super::property::WindowEventWaitMode;
 use super::property::WindowPositionOption;
 use super::property::WindowProperty;
 use super::property::WindowPropertySet;
@@ -139,6 +140,7 @@ impl<'window> Window<'window> {
  
          match property {
             WindowPropertySet::SetParent(parent, option) => self.set_parent(parent, *option),
+            WindowPropertySet::SetEventWaitMode(mode) => self.set_event_wait_mode(*mode),
             WindowPropertySet::RemoveParent => todo!(),
             WindowPropertySet::Title(title) => self.set_title(title),
             WindowPropertySet::Position(option) => self.set_position(option),
@@ -223,6 +225,11 @@ impl<'window> Window<'window> {
         is_parent
     }
 
+    #[inline(always)]
+    fn set_event_wait_mode(&mut self, mode : WindowEventWaitMode) -> Result<bool, StudioError>{
+        Ok(self.manager.set_event_wait_mode(mode))
+    }
+
 
     #[inline(always)]
     fn set_title(&mut self, title : &String) -> Result<bool, StudioError>{
@@ -277,19 +284,8 @@ impl<'window> Window<'window> {
     #[inline(always)]
     fn set_keyboard_property(&mut self, property : &KeyboardPropertySet) -> Result<bool, StudioError>{
         match property {
-            KeyboardPropertySet::EnableAutoRepeat => self.enable_autorepeat(),
-            KeyboardPropertySet::DisableAutoRepeat => self.disable_autorepeat(),
+            KeyboardPropertySet::SetMode(mode) => Ok(self.manager.set_keyboard_mode(*mode)),
         }
-    }
-
-    #[inline(always)]
-    fn enable_autorepeat(&mut self) -> Result<bool, StudioError>{
-        Ok(self.manager.enable_autorepeat())
-    }
-
-    #[inline(always)]
-    fn disable_autorepeat(&mut self) -> Result<bool, StudioError>{
-        Ok(self.manager.disable_autorepeat())
     }
 
     #[inline(always)]

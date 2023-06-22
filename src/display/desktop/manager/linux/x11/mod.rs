@@ -1,18 +1,18 @@
 use std::cell::RefCell;
-use std::ffi::{CString, c_int};
+use std::ffi::{CString, c_int, CStr, c_void};
 use std::panic::catch_unwind;
 use std::ptr::{null_mut};
 use std::thread;
 
 use crate::display::desktop::event::Event;
-use crate::display::desktop::event::keyboard::{Key, KeyIdentity, KEYCODE_IDENTITY, KeyCodeIdentityList};
 use crate::display::desktop::event::window::EventWindow;
 use crate::display::desktop::manager::WindowManager;
-use crate::display::desktop::property::{WindowProperty, SubWindowOption, WindowPositionOption, get_absolute_position_from_relative, PointerMode};
+use crate::display::desktop::manager::linux::x11::cbind::xinput::{XNQueryInputStyle, XIMStyle, XIMPreeditNothing, XIMStatusNothing, XNInputStyle, XNClientWindow, XNFocusWindow};
+use crate::display::desktop::property::{WindowProperty, SubWindowOption, WindowPositionOption, get_absolute_position_from_relative, PointerMode, KeyboardMode, WindowEventWaitMode};
 use crate::display::desktop::window::Window;
 use crate::error::StudioError;
 use self::cbind::structs::XEvent;
-use self::cbind::xkb::{XKB_ALL_COMPONENTS_MASK, XKB_USE_CORE_KBD};
+use self::cbind::xinput::{XIM, XIC, XIMStyles };
 
 /// Contains X11 C Bind
 pub(crate) mod cbind;
@@ -58,15 +58,17 @@ macro_rules! x11_change_property {
     }
 }
 
+/*
 macro_rules! key_identity_matchs {
     ($str : ident, $keyid : ident $(,$keysid:ident)*) => {
-        match $str.replace("\0", "").as_str() {
+        match $str.replace("\0", "").replace("-", "D").replace("+", "U").as_str() {
             stringify!($keyid) => KeyIdentity::$keyid,
             $(stringify!($keysid) => KeyIdentity::$keysid,)*
             _ => KeyIdentity::NOID,
         }
     };
 }
+*/
 
 /// Static cache to know if X11 is supported
 #[doc(hidden)]
@@ -78,6 +80,12 @@ pub(crate) struct X11WindowManager<'window> {
 
     /// Event given as reference
     event : Event,
+
+    /// Xinput method
+    xim : XIM,
+
+    /// Xinput context
+    xic : XIC,
 
     /// Retained events that will be sent next poll_event 
     pub(crate) retained_events : RefCell<Vec<Event>>,
@@ -115,11 +123,7 @@ impl<'window> WindowManager<'window> for X11WindowManager<'window> {
             let display = XOpenDisplay(std::ptr::null());      // Display connection
             let atoms = X11Atoms::new(display);                         // X11 Atoms
 
-            match KEYCODE_IDENTITY {    // Initialize Keyboard identity
-                Option::None => Self::fill_keycode_identity(display),
-                _ => {}
-            }
-            
+
             Ok(X11WindowManager {
                 x_event: XEvent{ _type:0 }, 
                 retained_events: RefCell::new(Vec::new()),
@@ -132,6 +136,8 @@ impl<'window> WindowManager<'window> for X11WindowManager<'window> {
                 mapped: false,
                 fullscreen: false,
                 event: Event::None,
+                xim: 0,
+                xic: 0,
             })
         }
         
@@ -145,15 +151,17 @@ impl<'window> WindowManager<'window> for X11WindowManager<'window> {
     #[inline(always)]
     fn poll_event(&mut self) -> &Event  {
 
-        if self.retained_events.borrow().len() > 0 { // Pop event from retained
-            self.event = self.retained_events.borrow_mut().pop().unwrap();
-        } else {
-            // Get count to poll
-            if self.event_count == 0 {
-                self.sync();
-                self.event_count = self.get_event_count();
-            }
-            self.event = self.get_event();
+        match self.property.wait_mode {
+            WindowEventWaitMode::NeverWait => {
+                if self.event == Event::None {
+                    self.sync();
+                    self.event_count = self.get_event_count();
+                }
+                self.event = self.fetch_event();
+            },
+            WindowEventWaitMode::AlwaysWait => {
+                self.event = self.fetch_event();
+            },
         }
         
         &self.event
@@ -202,6 +210,12 @@ impl<'window> WindowManager<'window> for X11WindowManager<'window> {
             self.mapped = false;
             self.property.visible = false;
         }
+    }
+
+    #[inline(always)]
+    fn set_event_wait_mode(&mut self, mode : WindowEventWaitMode) -> bool {
+        self.property.wait_mode = mode;
+        false
     }
 
     #[inline(always)]
@@ -267,14 +281,8 @@ impl<'window> WindowManager<'window> for X11WindowManager<'window> {
     }
 
     #[inline(always)]
-    fn enable_autorepeat(&mut self) -> bool {
-        self.property.keyboard.auto_repeat = true;
-        false
-    }
-
-    #[inline(always)]
-    fn disable_autorepeat(&mut self) -> bool {
-        self.property.keyboard.auto_repeat = false;
+    fn set_keyboard_mode(&mut self, mode : KeyboardMode) -> bool {
+        self.property.keyboard.mode = mode;
         false
     }
 
@@ -338,27 +346,31 @@ impl<'window> WindowManager<'window> for X11WindowManager<'window> {
         self.display as *const usize
     }
 
+    #[inline(always)]
     fn get_properties(&self) -> &WindowProperty {
         &self.property
     }
 
+    #[inline(always)]
     fn set_parent<'manager: 'window>(&mut self, parent : &'manager Window<'manager>, option : SubWindowOption) -> bool {
         self.property.parent = Some((parent, option));
         false
     }
 
+    #[inline(always)]
     fn remove_parent(&mut self) -> bool {
         self.property.parent = Option::None;
         false
     }
 
     
-
+    #[inline(always)]
     fn set_fullscreen(&mut self, fsmode : crate::display::desktop::property::FullScreenMode) -> bool {
         self.property.fullscreen = Some(fsmode);
         true
     }
 
+    #[inline(always)]
     fn set_pointer_mode(&mut self, mode : &crate::display::desktop::property::PointerMode) -> bool {
         match mode {
             PointerMode::Acceleration => self.set_pointer_position(self.property.center),
@@ -366,6 +378,46 @@ impl<'window> WindowManager<'window> for X11WindowManager<'window> {
         };
         self.property.pointer.mode = *mode;
         false
+    }
+
+    #[inline(always)]
+    fn is_key_shift_down(state : u32) -> bool {
+        state & ShiftMask as u32 > 0
+    }
+
+    #[inline(always)]
+    fn is_key_ctrl_down(state : u32) -> bool {
+        state & ControlMask as u32 > 0
+    }
+
+    #[inline(always)]
+    fn is_key_alt_down(state : u32) -> bool {
+        state & Mod1Mask as u32 > 0
+    }
+
+    #[inline(always)]
+    fn is_key_meta_down(state : u32) -> bool {
+        state & Mod3Mask as u32 > 0
+    }
+
+    #[inline(always)]
+    fn is_key_command_down(state : u32) -> bool {
+        state & Mod4Mask as u32 > 0
+    }
+
+    #[inline(always)]
+    fn is_key_hyper_down(state : u32) -> bool {
+        state & Mod5Mask as u32 > 0
+    }
+
+    #[inline(always)]
+    fn is_capslock_on(state : u32) -> bool {
+        state & LockMask as u32 > 0
+    }
+
+    #[inline(always)]
+    fn is_numlock_on(state : u32) -> bool {
+        state & Mod2Mask as u32 > 0
     }
 
     
@@ -412,6 +464,9 @@ impl<'window> X11WindowManager<'window> {
 
             // Flush buffer
             XFlush(self.display);
+
+            // Create XIC and XIM
+            self.create_xim_xic(self.display, self.window);
 
             // Set window created flag to true.
             self.property.created = true;
@@ -522,8 +577,53 @@ impl<'window> X11WindowManager<'window> {
         }
     }
 
+    /// Open XIM and XIC connection.
+    /// 
+    /// Reference(s)
+    /// <https://handmade.network/forums/articles/t/2834-tutorial_a_tour_through_xlib_and_related_technologies>
+    #[inline(always)]
+    fn create_xim_xic(&mut self, display : *mut X11Display, window : *mut X11Handle) {
 
+        unsafe {
+            let x_input_method = XOpenIM(display, 0, 0 as *mut i8, 0 as *mut i8);
+            assert!(x_input_method > 0, "Input Styles could not be retrieved!");
 
+            let mut styles: *mut XIMStyles = null_mut();
+            let input_style = CStr::from_bytes_with_nul(XNQueryInputStyle.as_bytes()).unwrap();
+
+            assert!(XGetIMValues(x_input_method, input_style.as_ptr(), &mut styles, null_mut()) == null_mut() as *mut i8, "Input Styles could not be retrieved");
+
+            let mut best_match_style : XIMStyle  = 0;
+            for i in 0..(*styles).count_styles {
+                let this_style : *mut XIMStyle = (*styles).supported_styles.offset(i as isize);
+                if *this_style == (XIMPreeditNothing as u64 | XIMStatusNothing as u64)
+                {
+                    best_match_style = *this_style;
+                    break;
+                }
+            }
+                
+            XFree(styles as *mut c_void);
+
+            assert!(best_match_style > 0, "No matching input style could be determined");
+
+            let input_style = CStr::from_bytes_with_nul(XNInputStyle.as_bytes()).unwrap();
+            let client_window = CStr::from_bytes_with_nul(XNClientWindow.as_bytes()).unwrap();
+            let focus_window = CStr::from_bytes_with_nul(XNFocusWindow.as_bytes()).unwrap();
+
+            let x_input_context = XCreateIC(x_input_method, input_style.as_ptr(), best_match_style,
+            client_window.as_ptr(), window, focus_window.as_ptr(), window, null_mut());
+
+            assert!(x_input_context > 0, "Input Context could not be created");
+
+            XSetICFocus(x_input_context);
+
+            self.xim = x_input_method;
+            self.xic = x_input_context;
+        }
+    }
+
+    /*
     /// Fill keycode identities link.
     #[inline(always)]
     fn fill_keycode_identity(display : *mut X11Display){
@@ -539,10 +639,14 @@ impl<'window> X11WindowManager<'window> {
                 let str = str.replace("\0", "");
             
                 list[i as usize] = match String::from_utf8(a.iter().map(|&c| c as u8).collect()){
-                    Ok(str) => key_identity_matchs!{str, ESC,FK01,FK02,FK03,FK04,FK05,FK06,FK07,FK08,FK09,FK10,FK11,FK12,PRSC,SCLK,PAUS,TLDE,AE01,AE02,AE03,AE04,AE05,AE06,AE07,AE08,AE09,AE10,AE11,AE12,
-                        BKSP,TAB,AD01,AD02,AD03,AD04,AD05,AD06,AD07,AD08,AD09,AD10,AD11,AD12,BKSL,CAPS,AC01,AC02,AC03,AC04,AC05,AC06,AC07,AC08,AC09,AC10,AC11,RTRN,LFSH,
-                        AB01,AB02,AB03,AB04,AB05,AB06,AB07,AB08,AB09,AB10,RTSH,LCTL,LALT,SPCE,RALT,RCTL,INS,HOME,PGUP,DELE,END,PGDN,UP,LEFT,DOWN,RGHT,NMLK,KPDV,
-                        KPMU,KPSU,KPAD,KPEN,KPDL,KP0,KP1,KP2,KP3,KP4,KP5,KP6,KP7,KP8,KP9},
+                    Ok(str) => key_identity_matchs!{str, LSGT,TLDE,AE01,AE02,AE03,AE04,AE05,AE06,AE07,AE08,AE09,AE10,AE11,AE12,BKSP,TAB,AD01,AD02,AD03,AD04,AD05,AD06,AD07,AD08,AD09,AD10,AD11,AD12,BKSL,RTRN,CAPS,AC01,AC02,
+                        AC03,AC04,AC05,AC06,AC07,AC08,AC09,AC10,AC11,LFSH,AB01,AB02,AB03,AB04,AB05,AB06,AB07,AB08,AB09,AB10,RTSH,LALT,LCTL,SPCE,RCTL,RALT,LWIN,RWIN,COMP,ESC,FK01,FK02,FK03,
+                        FK04,FK05,FK06,FK07,FK08,FK09,FK10,FK11,FK12,PRSC,SCLK,PAUS,INS,HOME,PGUP,DELE,END,PGDN,UP,LEFT,DOWN,RGHT,NMLK,KPDV,KPMU,KPSU,KP7,KP8,KP9,KPAD,KP4,KP5,KP6,KP1,KP2,
+                        KP3,KPEN,KP0,KPDL,KPEQ,FK13,FK14,FK15,FK16,FK17,FK18,FK19,FK20,FK21,FK22,FK23,FK24,HKTG,AB11,HENK,MUHE,AE13,KATA,HIRA,JPCM,HNGL,HJCV,MUTE,VOLD,VOLU,POWR,STOP,AGAI,
+                        PROP,UNDO,FRNT,COPY,OPEN,PAST,FIND,CUT,HELP,LNFD,I120,I126,I128,I129,I147,I148,I149,I150,I151,I152,I153,I154,I155,I156,I157,I158,I159,I160,I161,I162,I163,I164,I165,
+                        I166,I167,I168,I169,I170,I171,I172,I173,I174,I175,I176,I177,I178,I179,I180,I181,I182,I183,I184,I185,I186,I187,I188,I189,I190,I208,I209,I210,I211,I212,I213,I214,I215,
+                        I216,I217,I218,I219,I220,I221,I222,I223,I224,I225,I226,I227,I228,I229,I230,I231,I232,I233,I234,I235,I236,I237,I238,I239,I240,I241,I242,I243,I244,I245,I246,I247,I248,
+                        I249,I250,I251,I252,I253,I254,I255,LVL3,MDSW,ALT,META,SUPR,HYPR},
                     Err(_) => KeyIdentity::NOID,
                 };
                 println!("{} = {:?} = {:?}", i, list[i as usize], str);
@@ -551,6 +655,53 @@ impl<'window> X11WindowManager<'window> {
             KEYCODE_IDENTITY = Some(KeyCodeIdentityList::new(list));
         }
     }
+
+    #[allow(non_upper_case_globals)]    // Imported C global aren't formatted according to convention.
+    pub fn get_char(key : &Key) -> Option<char> {
+
+        Option::None
+        /*
+        if key.xic > 0 {    // Make sure Xinput context is initialized.
+            let mut buffer:[c_char;4] = [0;4];
+            let mut status: c_int = 0;
+            //let mut ks: X11Keysim = 0;
+            unsafe { Xutf8LookupString(key.xic, key.key_event, &mut buffer as *mut c_char,4, 
+                null_mut(), &mut status) };
+            
+            //let symbol = buffer.
+            
+            match status {  // Match lookup status
+                XBufferOverflow => panic!("Buffer overflow when trying to create keyboard symbol map"),
+                XLookupChars => char::from_u32(unsafe { std::mem::transmute::<[c_char; 4], u32>(buffer) }),
+                _ => Option::None,
+            }
+
+                    
+        } else {
+            Option::None
+        }
+        */
+        //let keysim = unsafe { XkbKeycodeToKeysym(key.display as *mut u64, key.keycode as u8, 0, 0) };
+
+        //println!("Keysim=`{}`", keysim);
+        //char::from_u32(keysim)
+        /*
+        let mut buffer : [c_uchar;4] = [0;4];
+        //let mut buffer:u32 = 0;
+        let size = unsafe { xkb_state_key_get_utf8(&key.modifier, key.keycode, buffer.as_mut_ptr(), 4) };
+
+        if size > 0 {   // Character found
+            match char::from_u32(u32::from_le_bytes(buffer as [u8;4])){
+                Some(char) => Some(char),
+                Option::None => Option::None,
+            }
+        } else {    // No character found
+            Option::None
+        }
+        */
+
+    }
+    */
 }
 
 impl<'window> Drop for X11WindowManager<'window> {

@@ -1,6 +1,6 @@
 
 /// Enumeration of possible gamepad events
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum EventGamepad {
 
     /// Happens when a controller device has been connected. Provides controller id.
