@@ -25,7 +25,7 @@ impl ScreenList {
         match_cfg! {
             linux => {
                 // TODO: Try with Wayland first then X11
-                let screens = crate::display::desktop::provider::linux::x11::screen::get_x11_screen_list();
+                let screens = crate::display::desktop::manager::linux::x11::screen::get_x11_screen_list();
 
                 match screens{
                     Ok(screens) => Ok(screens),

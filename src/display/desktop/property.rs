@@ -1,7 +1,6 @@
-use std::{cell::{RefCell}, rc::Rc};
+use crate::{display::desktop::screen::Screen};
 
-use crate::error::StudioError;
-use super::{screen::Screen, window::Window };
+use super::window::Window;
 
  /// Minimum [Window] width allowed.
 pub const WINDOW_MIN_WIDTH : u32 = 1;
@@ -20,6 +19,20 @@ pub const DEFAULT_WIDTH : u32 = 640;
 
 /// Default [Window] height.
 pub const DEFAULT_HEIGHT : u32 = 480;
+
+
+/// [Window] event wait mode.
+#[derive(Debug, Copy, Clone)]
+pub enum WindowEventWaitMode {
+    /// This mode is more suitable for games and interfaces that must refresh
+    /// often. This mode is MANDATORY if you want to achieve [IMMEDIATE](https://en.wikipedia.org/wiki/Immediate_mode_GUI) user interfaces.
+    NeverWait,
+
+    /// This mode will lock the window thread until an event occurred. Takes way less
+    /// computing power and is suited for applications. This mode is MANDATORY if you want to 
+    /// achieve [RETAINED](https://en.wikipedia.org/wiki/Retained_mode) user interfaces.
+    AlwaysWait,
+}
 
 /// [Window] fullscreen mode enumeration.
 #[derive(Clone)]
@@ -60,12 +73,8 @@ pub enum WindowPositionOption {
 /// Contains keyboard properties that can be set.
 pub enum KeyboardPropertySet {
 
-    /// Key will be repeated when pressed down.
-    EnableAutoRepeat,
-
-
-    /// Key won't be repeated when pressed down.
-    DisableAutoRepeat,
+    /// Set [KeyboardMode].
+    SetMode(KeyboardMode),
 
 }
 
@@ -121,13 +130,16 @@ pub enum SubWindowOption {
 }
 
 /// Enumeration of possible [Window](super::window::Window) properties that can be set.
-pub enum WindowPropertySet {
+pub enum WindowPropertySet<'window> {
 
     /// Set the window parent from a reference cell. Sub window are showed according to [SubWindowOption].
     /// When closing a parent, all sub window must also be closed.
     /// 
     /// Note : A window cannot be it's own parent nor can it become the subwindow of his subwindows.
-    SetParent(Rc<RefCell<Window>>, SubWindowOption),
+    SetParent(&'window Window<'window>, SubWindowOption),
+
+    /// Set the window event wait mode.
+    SetEventWaitMode(WindowEventWaitMode),
 
     /// Remove window from parent, making it a parentless window.
     RemoveParent,
@@ -168,22 +180,19 @@ pub enum WindowPropertySet {
 
 
 /// [Window] properties.
-pub struct WindowProperty {
-    
+pub struct WindowProperty<'window> {
+
+    /// [Window] parent reference must be contained in a reference counter.
+    pub(super) parent : Option<(&'window Window<'window>, SubWindowOption)>,
+
     /// Window pointer properties
     pub pointer : PointerProperty,
 
     /// Window pointer properties
     pub keyboard : KeyboardProperty,
 
-    /// Parent window reference cell (if any)
-    pub parent : Option<Rc<RefCell<Window>>>,
-
-    /// Subwindow array
-    pub subs : Vec<Rc<RefCell<Window>>>,
-
-    /// Subwindow option for this window.
-    pub subwindow_option : Option<SubWindowOption>,
+    /// Window event wait mode
+    pub wait_mode : WindowEventWaitMode,
 
     /// Window title
     pub title : String,
@@ -220,13 +229,10 @@ pub struct WindowProperty {
 
     /// Window is locked. Usually by showing a modal window.
     pub locked:bool,
-
-
 }
 
-impl WindowProperty{
-    /// Create a new instance of [KWindowProperty] with default values from position and size.
-    pub(crate) fn new() -> WindowProperty {
+impl<'window> WindowProperty<'window>{
+    pub(crate) fn new() -> WindowProperty<'window> {
         WindowProperty{ 
             title: String::new(), 
             position : (0,0), 
@@ -240,103 +246,13 @@ impl WindowProperty{
             visible: false,
             created: false,
             decoration: true,
-            parent: None,
-            subs: Vec::new(),
             locked: false,
             relative_position: WindowPositionOption::Desktop((0,0)),
-            subwindow_option: None, 
+            parent: None,
+            wait_mode: WindowEventWaitMode::NeverWait,  // Never wait by default to prevent new user confusion.
         }
     }
- 
-
-    /// Add a sub window.
-    /// 
-    /// Returns Ok(true) on success or Err(StudioError) if already added or owned.
-    pub(crate) fn add_sub(&mut self, sub: Rc<RefCell<Window>>){
-
-        // usize::MAX means subwindow was not found.
-        if self.get_sub_index(sub.clone()) == usize::MAX {
-            self.subs.push(sub)
-        }
-
-    }
-
-    /// Remove a subwindow from the subwindow array.
-    /// 
-    /// Returns index as usize of deleted.
-    pub(crate) fn remove_sub(&mut self, sub: Rc<RefCell<Window>>)-> usize {
-
-        let index = self.get_sub_index(sub);
-
-        // Try to remove only if found.
-        if index != usize::MAX {
-            self.subs.remove(index);
-        }
-
-        index
-    }
-
-    /// Get index of subwindow in array.
-    /// 
-    /// Returns Ok(index) on success, usize::MAX on failure.
-    fn get_sub_index(&self, sub: Rc<RefCell<Window>>) -> usize {
-        for i in 0..self.subs.len() {
-            match self.subs.get(i){
-                Some(sw) => if Rc::ptr_eq(sw, &sub) {
-                    return i
-                },
-                None => {},
-            }
-        }
-
-        usize::MAX
-    }
-
-    /// Get an absolute (x,y) position from a relative position option of a given window.
-    /// 
-    /// Return Ok(position) on success, DisplayError::PositionNoParent on failure.
-    pub fn get_absolute_position_from_relative(&self, option : &WindowPositionOption) -> Result<(i32, i32), StudioError> {
-
-        match option {
-            // Desktop position is already an absolute.
-            WindowPositionOption::Desktop(position) => Ok(*position),
-
-            // Add screen offset to position
-            WindowPositionOption::Screen(screen, position) =>
-                Ok((screen.get_extended_position().0 + position.0, screen.get_extended_position().1 + position.1)),
-
-            // Add parent position. Will raise error if no parent.
-            WindowPositionOption::Parent(position) => {
-                match &self.parent {  // Verify if parent, then raise error if None.
-                    Some(parent) => {
-                        let parent_pos = parent.borrow().get_properties().position;
-                        Ok((parent_pos.0 + position.0, parent_pos.1 + position.1))
-                    },
-                    None => Err(StudioError::Display(crate::display::DisplayError::PositionNoParent)),
-                }
-            },
-
-            WindowPositionOption::CenterScreen(screen) => {
-                let screen_pos = screen.get_extended_position();
-                let screen_size = screen.get_current_resolution();
-                let size = self.size;
-
-                Ok((screen_pos.0 + ((screen_size.0 - size.0) / 2) as i32, screen_pos.1 + ((screen_size.1 - size.1) / 2) as i32))
-            },
-
-
-            WindowPositionOption::CenterParent => match &self.parent {  // Verify if parent, then raise error if None.
-                    Some(parent) => {
-                        let parent_pos =parent.borrow().get_properties().position;
-                        let parent_size =  parent.borrow().get_properties().size;
-                        let size = self.size;
-
-                        Ok((parent_pos.0 + ((parent_size.0 - size.0) / 2) as i32, parent_pos.1 + ((parent_size.1 - size.1) / 2) as i32))
-                    },
-                    None => Err(StudioError::Display(crate::display::DisplayError::PositionNoParent)),
-                },
-        }
-    }
+    
 
     /// Returns true if size if within MIN and MAX.
     pub fn is_size_within_boundaries(size : &(u32, u32)) -> bool {
@@ -353,19 +269,30 @@ impl WindowProperty{
 
 }
 
+/// Enumeration of possible keyboard mode for input.
+#[derive(Debug, Clone, Copy)]
+pub enum KeyboardMode {
+    /// Direct mode is faster and more suitable for games. Provides [EventKeyboard::KeyUp](super::event::keyboard::EventKeyboard)
+    /// and [EventKeyboard::KeyDown](super::event::keyboard::EventKeyboard) and disable auto-repeat.
+    DirectInput,
+
+    /// Text mode is slower since it provides more information for text entry. Provides [EventKeyboard::KeyPress](super::event::keyboard::EventKeyboard)
+    /// and enable auto-repeat.
+    TextInput,
+}
 
 /// Contains keyboard properties.
 pub struct KeyboardProperty {
 
-    /// If true, key will be repeated when pressed down.
-    pub auto_repeat:bool,
+    /// [KeyboardMode] of the keyboard. Use [KeyboardMode::DirectInput] by default.
+    pub mode:KeyboardMode,
 
 }
 
 impl KeyboardProperty {
     /// Create new instance of keyboard property with auto repeat to false.
     pub(crate) fn new() -> KeyboardProperty {
-        KeyboardProperty { auto_repeat:false }
+        KeyboardProperty { mode : KeyboardMode::DirectInput }
     }
 }
 
@@ -394,5 +321,44 @@ impl PointerProperty {
             visible: true, 
             confined: false,
         }
+    }
+}
+
+/// Get an absolute (x,y) position from a relative position option of a given window.
+/// 
+/// Return Ok(position) on success, DisplayError::PositionNoParent on failure.
+pub fn get_absolute_position_from_relative(size : (u32, u32), parent: Option<(&Window<'_>, SubWindowOption)>, option : &WindowPositionOption) -> (i32, i32) {
+
+    // Take value from parent if any or init at (0,0) if None
+    let (parent_pos,parent_size) = match parent {
+        Some(parent) => (parent.0.get_properties().position, parent.0.get_properties().size),
+        None => ((0,0),(0,0)),
+    };
+
+    match option {
+        // Desktop position is already an absolute.
+        WindowPositionOption::Desktop(position) => *position,
+
+        // Add screen offset to position
+        WindowPositionOption::Screen(screen, position) =>
+            (screen.get_extended_position().0 + position.0, screen.get_extended_position().1 + position.1),
+
+        // Add parent position. Will raise error if no parent.
+        WindowPositionOption::Parent(position) => {
+            (parent_pos.0 + position.0, parent_pos.1 + position.1)
+        },
+
+        // Center to the screen.
+        WindowPositionOption::CenterScreen(screen) => {
+            let screen_pos = screen.get_extended_position();
+            let screen_size = screen.get_current_resolution();
+
+            (screen_pos.0 + ((screen_size.0 - size.0) / 2) as i32, screen_pos.1 + ((screen_size.1 - size.1) / 2) as i32)
+        },
+
+
+        WindowPositionOption::CenterParent => {
+            (parent_pos.0 + ((parent_size.0 - size.0) / 2) as i32, parent_pos.1 + ((parent_size.1 - size.1) / 2) as i32)
+        },
     }
 }

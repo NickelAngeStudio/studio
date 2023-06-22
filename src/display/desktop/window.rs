@@ -1,65 +1,46 @@
 //! Window abstraction and properties
 
-target_cfg! {
-    linux => {
-        pub type WindowManagerType = super::provider::linux::LinuxWindowManager;
-    }
-}
-
-
-use std::cell::{RefCell};
-use std::rc::Rc;
-
-use cfg_boost::{ target_cfg};
-
 use crate::display::DisplayError;
 use crate::error::StudioError;
 
-
+use super::event::Event;
 use super::manager::WindowManager;
-use super::property::{WindowPropertySet, WindowProperty, WindowPositionOption, SubWindowOption, KeyboardPropertySet, FullScreenMode, PointerPropertySet, PointerMode};
-use super::event::{Event, EventWindow, EventMouse};
-use super::provider::WindowProvider;
+use super::manager::WindowManagerType;
+use super::manager::WindowProvider;
+use super::property::FullScreenMode;
+use super::property::KeyboardPropertySet;
+use super::property::PointerMode;
+use super::property::PointerPropertySet;
+use super::property::SubWindowOption;
+use super::property::WindowEventWaitMode;
+use super::property::WindowPositionOption;
+use super::property::WindowProperty;
+use super::property::WindowPropertySet;
 
-/// Window with a manager.
+/// Window wrapping a WindowManager.
 /// 
 /// Steps :
 /// new()
 /// set_properties
 /// show()
-pub struct Window {
+pub struct Window<'window> {
 
     /// [WindowManager] of this window
-    manager : WindowManagerType,
-
-    /// [Window] properties
-    pub(super) property : WindowProperty,
-
-    /// Self contained Rc Ref
-    refcell : Option<Rc<RefCell<Window>>>,
+    pub(crate) manager : WindowManagerType<'window>,
 }
 
-
-impl Window {
+impl<'window> Window<'window> {
 
     /// Create a new [Window] wrapped in a reference cell and reference counter.
     /// 
     /// Returns Ok(Rc<RefCell<[Window]>>) on success, Err([StudioError]) on error.
-    pub fn new() -> Result<Rc<RefCell<Window>>, StudioError> {
+    pub fn new() -> Result<Window<'window>, StudioError> {
 
         match WindowManagerType::new() {
             
             Ok(wm) => {
-                let window = Rc::new(RefCell::new(Window { 
-                    manager: wm, 
-                    property: WindowProperty::new(),
-                    refcell: None }));
-
-
-                // Add self Rc reference to self.
-                window.borrow_mut().refcell = Some(window.clone());
-
-                Ok(window)
+               Ok(Window { 
+                    manager: wm })
             },
             Err(err) => Err(err),
         }        
@@ -72,50 +53,50 @@ impl Window {
 
     /// Show the window. By default, new windows are hidden and .show() must be called.
     pub fn show(&mut self) {
-        if !self.property.visible { // Only if not visible
-            self.manager.show(&self.property);
-            self.property.visible = true;
+        if !self.manager.get_properties().visible { // Only if not visible
+            self.manager.show()
         }
     }
 
     // Hide the window. The window ressources are not freed and can still receive events.
     pub fn hide(&mut self){
-        if self.property.visible {  // Only if visible
+        if self.manager.get_properties().visible {  // Only if visible
             self.manager.hide();
-            self.property.visible = false;
         }
     }
  
     // Force close the window. The window ressources are freed and cannot receive events.
     pub fn close(&mut self){
-        if self.property.created {
+        if self.manager.get_properties().created {
             self.manager.close();
-            self.property.created = false;
         }
     }
 
     /// Pop a window event from the queue.
-    pub fn poll_event(&mut self) -> Event{
-        
-        let event = self.manager.poll_event();
-        match event {
-            Event::Window(w_event) => self.handle_window_event(event, w_event),
-            Event::Mouse(m_event) => self.handle_mouse_event(event, m_event),
-            _ => event,
-        }       
-
+    pub fn poll_event(&mut self) -> &Event{
+        self.manager.poll_event() 
     }
 
     /// Get window properties in a read only struct.
     pub fn get_properties(&self) -> &WindowProperty {
-        &self.property
+        &self.manager.get_properties()
     }
 
     /// Set a window property according to family.
     /// 
     /// Return Ok() with the count of property changed on success, Err(StudioError) on failure.
-    pub fn set_property(&mut self, property : WindowPropertySet) -> Result<usize, StudioError>{
-        self.set_properties(&[property])
+    pub fn set_property(&mut self, property : &'window WindowPropertySet<'window>) -> Result<usize, StudioError>{
+
+        match self.set_window_property(property){
+            Ok(need_recreate) => {
+                if need_recreate {
+                    self.manager.recreate();
+                }
+                Ok(1)
+            },
+            Err(err) => return Err(err),   
+        }
+        
     }
 
     /// Set multiple window properties from an array. When setting multiple properties, this function 
@@ -123,7 +104,7 @@ impl Window {
     /// if window recreate is needed.
     /// 
     /// Returns Ok() the count of properties changed on success, Err(WindowPropertySet, StudioError) on failure.
-    pub fn set_properties(&mut self, properties : &[WindowPropertySet]) -> Result<usize, StudioError>{
+    pub fn set_properties(&mut self, properties : &'window [WindowPropertySet]) -> Result<usize, StudioError>{
 
         // Flag that indicate window need to be recreated
         let mut recreate_window = false;
@@ -144,114 +125,23 @@ impl Window {
             }
         }
 
-        if recreate_window && self.property.created {   // If window is created, recreate window
-            self.close();   // Close window to destroy
-            self.show();    // Show window to create
+        if recreate_window {
+            self.manager.recreate();
         }
 
         Ok(count)
     }
 
-    /// Get the OS Window manager window handle.
-    pub fn get_window_handle(&self) -> Option<*const usize>{
-        self.manager.get_window_handle()
-    }
-
-    target_cfg! {
-        linux => {
-            /// Get the OS Window manager display handle.
-            pub fn get_display_handle(&self) -> Option<*const usize>{
-                self.manager.get_display_handle()
-            }
-        }
-    }
-
-    /// Handle [EventWindow] before sending it to client.
-    #[inline(always)]
-    fn handle_window_event(&mut self, event : Event, w_event : EventWindow) -> Event {
-        match w_event {
-            EventWindow::Closed => {  // Window has been closed.
-                match &self.property.parent {
-                    Some(parent) => {
-                        // Remove child from parent list
-                        parent.borrow_mut().property.remove_sub(self.get_refcell());
-                        self.property.parent=None;
-                    },
-                    None => todo!(),
-                }
-            }
-            EventWindow::Shown => self.property.visible = false,
-            EventWindow::Hidden => self.property.visible = true,
-            EventWindow::Moved(position) => self.property.position = position,
-            EventWindow::MovedResized(position, size) => {
-                self.property.position = position;
-                self.property.size = size;
-            },
-            EventWindow::Resized(size) => self.property.size = size,
-            EventWindow::Minimized => {
-                self.property.minimized = true;
-                self.property.maximized = false;
-                self.property.fullscreen = None;
-
-            },
-            EventWindow::Maximized => {
-                self.property.minimized = false;
-                self.property.maximized = true;
-                self.property.fullscreen = None;
-            },
-            EventWindow::Fullscreen => {
-                self.property.minimized = false;
-                self.property.maximized = true;
-                self.property.fullscreen = None;
-            },
-            EventWindow::Restored => {
-                self.property.minimized = false;
-                self.property.maximized = false;
-                self.property.fullscreen = None;
-            },
-            _ => {},
-        }
-
-        event
-    }
-
-    /// Handle [EventMouse] before sending it to client.
-    #[inline(always)]
-    fn handle_mouse_event(&mut self, event : Event, m_event : EventMouse) -> Event {
-        match m_event {
-            EventMouse::Moved(position) => {
-                // Override cursor according to pointer mode
-                match self.property.pointer.mode {
-                    PointerMode::Cursor => event,   // Send event as is.
-                    PointerMode::Acceleration => {
-                        // Calc delta acceleration
-                        let position = (position.0 - self.property.center.0, 
-                            position.1 - self.property.center.1);
-
-                            if position.0 != 0 && position.1 != 0 { // Send acceleration only if it moved.
-                                // Reset pointer to center
-                                self.manager.set_pointer_position(&self.property.center);
-
-                                // Send acceleration event.
-                                Event::Mouse(EventMouse::Acceleration(position))
-                            } else {
-                                self.poll_event()   // Ignore and poll next event
-                            }
-                        },     
-                }
-            },
-            _ => event,
-        }
-    }
 
 
     /// Handle property changes
     #[inline(always)]
-    fn set_window_property(&mut self, property : &WindowPropertySet) -> Result<bool, StudioError> {
+    pub(in super::super) fn set_window_property(&mut self, property : &'window WindowPropertySet) -> Result<bool, StudioError> {
  
          match property {
-            WindowPropertySet::SetParent(parent, option) => self.set_parent(parent.clone(), option),
-            WindowPropertySet::RemoveParent =>  self.remove_parent(),
+            WindowPropertySet::SetParent(parent, option) => self.set_parent(parent, *option),
+            WindowPropertySet::SetEventWaitMode(mode) => self.set_event_wait_mode(*mode),
+            WindowPropertySet::RemoveParent => todo!(),
             WindowPropertySet::Title(title) => self.set_title(title),
             WindowPropertySet::Position(option) => self.set_position(option),
             WindowPropertySet::Size(size) => self.set_size(size),
@@ -266,35 +156,23 @@ impl Window {
          }
     }
 
-    /// Small shortcut to get RefCell without consuming it.
-    fn get_refcell(&self) -> Rc<RefCell<Window>> {
-        match &self.refcell {
-            Some(rc) => rc.clone(),
-            None => panic!(""),
-        }
-    }
-
+    /// Set the window parent wrapped in [Rc][RefCell] to a subwindow wrapped in [Rc][RefCell]. 
+    /// Sub window are showed according to [SubWindowOption].
+    /// When closing a parent, all sub window must also be closed.
+    /// 
+    /// Note : A window cannot be it's own parent nor can it become the subwindow of his subwindows.
     #[inline(always)]
-    fn set_parent(&mut self, parent : Rc<RefCell<Window>>, option : &SubWindowOption) -> Result<bool, StudioError>{
+    pub fn set_parent(&mut self, parent : &'window Window, option : SubWindowOption) -> Result<bool, StudioError>{
 
-        if  Rc::ptr_eq(&self.get_refcell(), &parent) {   // Make sure parent and child aren't the same.
+        if  self as * const _ == parent as * const _ {   // Make sure parent and child aren't the same.
             Err(StudioError::Display(crate::display::DisplayError::ParentSameAsSub))
-        } else if self.is_parent_sub_of_self(parent.clone()) {  // Make sure parent wasn't a child of the parent.
-            Err(StudioError::Display(crate::display::DisplayError::ParentIsSubOfWindow))
+        } else if self.is_self_parent_of_parent(parent) {  // Make sure parent wasn't a child of the parent.
+            Err(StudioError::Display(crate::display::DisplayError::ParentIsParent))
         } else {
             match self.remove_parent(){ // Remove current parent
                 Ok(_) => {
-                    // If remove successful, add to new parent.
-                    parent.borrow_mut().property.add_sub(self.get_refcell());
-
-                    // Set new parent reference.
-                    self.property.parent = Some(parent);
-
-                    // Set self subwindow option
-                    self.property.subwindow_option = Some(*option);
-
-                    // Return parent changed
-                    Ok(true)
+                    // Set new parent reference with option.
+                    Ok(self.manager.set_parent(parent, option))
                 },
                 Err(err) => Err(err),
             }
@@ -302,51 +180,56 @@ impl Window {
         
     }
 
+    /// Remove parent from a Subwindow. Parent function are statics since they needs
+    /// an [Rc][RefCell] and not [self].
     #[inline(always)]
-    fn remove_parent(&mut self) -> Result<bool, StudioError>{
+    pub fn remove_parent(&mut self) -> Result<bool, StudioError>{
 
-        match &self.property.parent {
-            Some(old_parent) => {   // If old parent is locked, raise error
+        match self.get_properties().parent {
+            Some(parent) => {   // If old parent is locked, raise error
                 // If locked, return Err(ParentIsLocked)
-                if old_parent.borrow().get_properties().locked {
+                if parent.0.get_properties().locked {
                     Err(StudioError::Display(crate::display::DisplayError::ParentIsLocked))
                 } else {
-
-                    // Remove sub window from parent.
-                    old_parent.borrow_mut().property.remove_sub(self.get_refcell());
-
                     // Remove window parent.
-                    self.property.parent = Option::None;
-
-                    // Remove show option
-                    self.property.subwindow_option = Option::None;
-
-                    // Return that parent was removed.
-                    Ok(true)
+                    Ok(self.manager.remove_parent())
                 }
             },
             None => Ok(false), // Nothing had to be done, no parent removed.
         }
+        
     }
 
-    /// Verify if future parent is a sub of current parent window.
+    /// Verify if future parent is a child of current parent.
     /// 
     /// Return true if is a child, false otherwise.
-    /// 
-    /// Note : No inline since recursive.
-    fn is_parent_sub_of_self(&self, parent : Rc<RefCell<Window>>) -> bool {
+    #[inline(always)]
+    fn is_self_parent_of_parent(&'window self, parent : &Window) -> bool {
         let mut is_parent = false;
 
-        self.property.subs.iter().for_each(|sub| 
-            if Rc::ptr_eq(sub, &parent) {
-                is_parent = true;
-            } else {
-                is_parent = is_parent || sub.borrow().is_parent_sub_of_self(parent.clone());     
+        let mut target = parent;
+        loop {
+            match target.get_properties().parent {
+                Some(parent) => {
+                    if self as * const _ == parent.0 as * const _ {
+                        is_parent = true;
+                        break;  // Break since self is parent of parent.
+                    } else {
+                        target = parent.0;
+                    }
+                },
+                None => break,  // Root reached
             }
-        );
+        }
 
         is_parent
     }
+
+    #[inline(always)]
+    fn set_event_wait_mode(&mut self, mode : WindowEventWaitMode) -> Result<bool, StudioError>{
+        Ok(self.manager.set_event_wait_mode(mode))
+    }
+
 
     #[inline(always)]
     fn set_title(&mut self, title : &String) -> Result<bool, StudioError>{
@@ -355,13 +238,7 @@ impl Window {
 
     #[inline(always)]
     fn set_position(&mut self, option: &WindowPositionOption) -> Result<bool, StudioError>{
-        match  self.property.get_absolute_position_from_relative(option){
-            Ok(position) => {
-                self.property.relative_position = option.clone();
-                Ok(self.manager.set_position(position))
-            },
-            Err(err) => return Err(err),
-        }
+        Ok(self.manager.set_position(option.clone()))
     }
 
     #[inline(always)]
@@ -375,75 +252,47 @@ impl Window {
 
     #[inline(always)]
     fn show_decoration(&mut self) -> Result<bool, StudioError>{
-        self.property.decoration = true;
         Ok(self.manager.show_decoration())
     }
 
     #[inline(always)]
     fn hide_decoration(&mut self) -> Result<bool, StudioError>{
-        self.property.decoration = false;
         Ok(self.manager.hide_decoration())
     }
 
     #[inline(always)]
     fn minimize(&mut self) -> Result<bool, StudioError>{
-        self.property.minimized = true;
-        self.property.maximized = false;
-        self.property.fullscreen = None;
         Ok(self.manager.minimize())
     }
 
     #[inline(always)]
     fn maximize(&mut self) -> Result<bool, StudioError>{
-        self.property.minimized = false;
-        self.property.maximized = true;
-        self.property.fullscreen = None;
         Ok(self.manager.maximize())
     }
 
     #[inline(always)]
     fn set_fullscreen(&mut self, fsmode : FullScreenMode) -> Result<bool, StudioError>{
-        self.property.fullscreen = Some(fsmode);
-                
-        // Full screen need to recreate window.
-        Ok(self.manager.set_fullscreen())
+        Ok(self.manager.set_fullscreen(fsmode))
     }
 
     #[inline(always)]
     fn restore(&mut self) -> Result<bool, StudioError>{
-    
-        self.property.minimized = false;
-        self.property.maximized = false;
-        self.property.fullscreen = None;
-
+        self.manager.restore();
         Ok(true)
     }
 
     #[inline(always)]
     fn set_keyboard_property(&mut self, property : &KeyboardPropertySet) -> Result<bool, StudioError>{
         match property {
-            KeyboardPropertySet::EnableAutoRepeat => self.enable_autorepeat(),
-            KeyboardPropertySet::DisableAutoRepeat => self.disable_autorepeat(),
+            KeyboardPropertySet::SetMode(mode) => Ok(self.manager.set_keyboard_mode(*mode)),
         }
-    }
-
-    #[inline(always)]
-    fn enable_autorepeat(&mut self) -> Result<bool, StudioError>{
-        self.property.keyboard.auto_repeat = true;
-        Ok(self.manager.enable_autorepeat())
-    }
-
-    #[inline(always)]
-    fn disable_autorepeat(&mut self) -> Result<bool, StudioError>{
-        self.property.keyboard.auto_repeat = false;
-        Ok(self.manager.disable_autorepeat())
     }
 
     #[inline(always)]
     fn set_pointer_property(&mut self, property : &PointerPropertySet) -> Result<bool, StudioError>{
         match property {
             PointerPropertySet::Mode(mode) => self.set_pointer_mode(mode),
-            PointerPropertySet::Position(position) => self.set_pointer_position(position),
+            PointerPropertySet::Position(position) => self.set_pointer_position(*position),
             PointerPropertySet::Show => self.show_pointer(),
             PointerPropertySet::Hide => self.hide_pointer(),
             PointerPropertySet::Confine => self.confine_pointer(),
@@ -453,28 +302,17 @@ impl Window {
 
     #[inline(always)]
     fn set_pointer_mode(&mut self, mode : &PointerMode) -> Result<bool, StudioError>{
-        self.property.pointer.mode = mode.clone();
-
-        match mode {
-            PointerMode::Acceleration => {
-                self.manager.set_pointer_position(&self.property.center);
-            },
-            _ => {},
-        }
-
-        Ok(false)
-
+        Ok(self.manager.set_pointer_mode(mode))
     }
 
     #[inline(always)]
-    fn set_pointer_position(&mut self, position : &(i32, i32)) -> Result<bool, StudioError>{
+    fn set_pointer_position(&mut self, position : (i32, i32)) -> Result<bool, StudioError>{
         Ok(self.manager.set_pointer_position(position))
     }
 
     #[inline(always)]
     fn show_pointer(&mut self) -> Result<bool, StudioError>{
-        if !self.property.pointer.visible {
-            self.property.pointer.visible = true;
+        if !self.get_properties().pointer.visible {
             Ok(self.manager.show_pointer())
         } else {
             Ok(false)
@@ -483,8 +321,7 @@ impl Window {
 
     #[inline(always)]
     fn hide_pointer(&mut self) -> Result<bool, StudioError>{
-        if self.property.pointer.visible {
-            self.property.pointer.visible = false;
+        if self.get_properties().pointer.visible {
             Ok(self.manager.hide_pointer())
         } else {
             Ok(false)
@@ -493,8 +330,7 @@ impl Window {
 
     #[inline(always)]
     fn confine_pointer(&mut self) -> Result<bool, StudioError>{
-        if !self.property.pointer.confined {
-            self.property.pointer.confined = true;
+        if !self.get_properties().pointer.confined {
             Ok(self.manager.confine_pointer())
         } else {
             Ok(false)
@@ -503,11 +339,11 @@ impl Window {
 
     #[inline(always)]
     fn release_pointer(&mut self)-> Result<bool, StudioError>{
-        if self.property.pointer.confined {
-            self.property.pointer.confined = false;
+        if self.get_properties().pointer.confined {
             Ok(self.manager.release_pointer())
         } else {
             Ok(false)
         }
     }
+    
 }
