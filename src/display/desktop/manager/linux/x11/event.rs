@@ -1,10 +1,10 @@
 //! Contains inline event functions.
 
-use std::{ffi::{c_int, c_ulong, c_char, c_void, CStr, c_uchar}, ptr::null_mut};
+use std::{ffi::{c_int, c_ulong, c_char, c_void}, ptr::null_mut};
 
-use crate::display::desktop::{event::{Event, keyboard::{EventKeyboard, KeyModifier, Key}, pointer::{EventPointer, PointerButton}, window::EventWindow}, manager::WindowManager, property::{PointerMode, WindowEventWaitMode, KeyboardMode}};
+use crate::display::desktop::{event::{Event, keyboard::{EventKeyboard, Key}, pointer::{EventPointer, PointerButton}, window::EventWindow}, manager::WindowManager, property::{PointerMode, WindowEventWaitMode, KeyboardMode}};
 
-use super::{ cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent, XEventsQueued, XSync, Xutf8LookupString, XLookupString, XFilterEvent}, xinput::{XBufferOverflow, XLookupChars}}, X11WindowManager};
+use super::{ cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent, XEventsQueued, XSync, Xutf8LookupString, XFilterEvent}, xinput::{XBufferOverflow, XLookupChars}}, X11WindowManager};
 use super::cbind::{constants::* };
 
 
@@ -169,31 +169,6 @@ impl<'window> X11WindowManager<'window> {
                                 Ok(s) => s.chars().next(),
                                 Err(_) => Option::None,
                             }
-
-                                                        //}
-                            
-                            
-                            //let buffer_u8:[u8;4] = [buffer[0] as u8, buffer[1] as u8, buffer[2] as u8, buffer[3] as u8];
-
-                            //match String::from_utf8(Vec::fr){
-
-                            //}
-                            //char::from_u32(u32::from_ne_bytes(buffer_u8))
-                           
-                            /*
-                            let a = u32::from_ne_bytes(buffer_u8);
-                            let c = char::from_u32(i)
-
-                            let mut vec : Vec<u8> = Vec::new();
-                            vec.push(buffer[0] as u8);
-                            vec.push(buffer[1] as u8);
-                                vec.push(buffer[2] as u8);
-                                    vec.push(buffer[3] as u8);
-                            match String::from_utf8(vec){
-                                Ok(s) => println!("XIC Got `{}`", s),
-                                Err(err) => println!("XIC Err `{}`", err),
-                            }
-                            */
                         },
                         _ => Option::None,  // No char associated
                     }
@@ -201,17 +176,6 @@ impl<'window> X11WindowManager<'window> {
                 } else {
                     Option::None    // No char associated
                 });
-            
-                /*
-                match status {  // Match lookup status
-                    XBufferOverflow => panic!("Buffer overflow when trying to create keyboard symbol map"),
-                    XLookupChars => char::from_u32(unsafe { std::mem::transmute::<[c_char; 4], u32>(buffer) }),
-                    _ => Option::None,
-                }
-                */
-    
-                        
-                
 
             Event::Keyboard(EventKeyboard::KeyPress(key))
         }
@@ -234,72 +198,8 @@ impl<'window> X11WindowManager<'window> {
     #[inline(always)]
     pub fn get_key_up_event(&mut self, xevent : &XEvent) -> Event{
         unsafe {
-            if self.event_count > 0 {
-                // 1. Peek next event
-                let peeked = self.fetch_event();
-
-                // 2. Make sure it's keyboard event
-                if let Event::Keyboard(kb_event) = peeked {
-                    // 3. Make sure it's keydown event
-                    if let EventKeyboard::KeyDown(keycode) = kb_event {
-                        // 4. If same keycode, ignore both event and get next
-                        if keycode == xevent._xkey._keycode {   
-                            return self.fetch_event();
-                        }
-                    }
-                }
-
-                // 5. If not ignored, retain peeked event
-                self.push_event(peeked);
-            } 
-            
-            // Key is not repeating, return current keyup
             Event::Keyboard(EventKeyboard::KeyUp(xevent._xkey._keycode))
         }
-    }
-
-/// Get modifier from Xkey state
-    /// 
-    /// Reference(s)
-    /// <https://github.com/glfw/glfw/blob/7e8da57094281c73a0be5669a4b79686b4917f6c/src/x11_window.c#L186>
-    #[inline(always)]
-    fn get_key_modifier_from_state(state : u32) -> u8 {
-
-        let mut modifier : u8 = 0;
-
-        if state & ShiftMask as u32 > 0 {   // Is SHIFT modifier on?
-            modifier = modifier | KeyModifier::SHIFT;
-        }
-            
-        if state & ControlMask as u32 > 0 { // Is CTRL modifier on?
-            modifier = modifier | KeyModifier::CTRL;
-        }
-
-        if state & Mod1Mask as u32 > 0 {    // Is ALT modifier on?
-            modifier = modifier | KeyModifier::ALT;
-        }
-
-        if state & Mod3Mask as u32 > 0 {    // Is META modifier on?
-            modifier = modifier | KeyModifier::META;
-        }
-
-        if state & Mod4Mask as u32 > 0 {    // Is COMMAND/SUPER modifier on?
-            modifier = modifier | KeyModifier::COMMAND;
-        }
-
-        if state & Mod5Mask as u32 > 0 {    // Is HYPER modifier on?
-            modifier = modifier | KeyModifier::HYPER;
-        }
-
-        if state & LockMask as u32 > 0 {    // Is CAPSLOCK on?
-            modifier = modifier | KeyModifier::CAPSLOCK;
-        }
-
-        if state & Mod2Mask as u32 > 0 {    // Is NUMLOCK on?
-            modifier = modifier | KeyModifier::NUMLOCK;
-        }
-
-        modifier
     }
 
     /// Get Event created from ButtonPress

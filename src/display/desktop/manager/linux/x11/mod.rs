@@ -160,6 +160,7 @@ impl<'window> WindowManager<'window> for X11WindowManager<'window> {
                 self.event = self.fetch_event();
             },
             WindowEventWaitMode::AlwaysWait => {
+                self.sync();
                 self.event = self.fetch_event();
             },
         }
@@ -283,6 +284,9 @@ impl<'window> WindowManager<'window> for X11WindowManager<'window> {
     #[inline(always)]
     fn set_keyboard_mode(&mut self, mode : KeyboardMode) -> bool {
         self.property.keyboard.mode = mode;
+
+        self.set_autorepeat_according_to_kbmode();
+
         false
     }
 
@@ -468,8 +472,13 @@ impl<'window> X11WindowManager<'window> {
             // Create XIC and XIM
             self.create_xim_xic(self.display, self.window);
 
+            // Set window keyboard mode
+            self.set_autorepeat_according_to_kbmode();
+
             // Set window created flag to true.
             self.property.created = true;
+
+            
 
             // Send created event to window
             self.push_event(Event::Window(EventWindow::Created))
@@ -495,6 +504,14 @@ impl<'window> X11WindowManager<'window> {
         }
 
         self.mapped = true;
+    }
+
+    /// Set keyboard autorepeat accordig to keyboard mode
+    fn set_autorepeat_according_to_kbmode(&self){
+        match self.property.keyboard.mode {
+            KeyboardMode::DirectInput => unsafe { XAutoRepeatOff(self.display) },  // Deactivate auto repeat
+            KeyboardMode::TextInput => unsafe { XAutoRepeatOn(self.display) }, // Activate auto repeat
+        }
     }
 
 

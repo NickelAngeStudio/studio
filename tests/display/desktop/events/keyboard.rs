@@ -1,4 +1,4 @@
-use studio::display::desktop::{window::{Window}, property::{WindowPropertySet, KeyboardPropertySet}};
+use studio::display::desktop::{window::{Window}, property::{WindowPropertySet, KeyboardPropertySet, KeyboardMode, WindowEventWaitMode}};
 
 use crate::{display::desktop::{ rsrcs::{main_loop}}, tools::{RESET_CONSOLE, BLUE_CONSOLE}};
 
@@ -7,6 +7,10 @@ use crate::{display::desktop::{ rsrcs::{main_loop}}, tools::{RESET_CONSOLE, BLUE
 pub fn test_keyboard(){
 
     let mut window = Window::new().unwrap();
+
+    // Set keyboard to direct input
+    window.set_properties(&[WindowPropertySet::SetEventWaitMode(WindowEventWaitMode::NeverWait),
+    WindowPropertySet::Keyboard(KeyboardPropertySet::SetMode(KeyboardMode::DirectInput))]).unwrap();
 
     window.show();
 
@@ -21,11 +25,12 @@ pub fn test_keyboard(){
     // Hold different keys
     main_loop(&mut window, &mut hold_different_keys::HoldDifferentKeys::new());
 
-    // Auto-repeat
-    //window.set_property(&WindowPropertySet::Keyboard(KeyboardPropertySet::EnableAutoRepeat)).expect("");
-    //main_loop(&mut window, &mut auto_repeat_space::AutoRepeatSpace::new());
-    //window.set_property(&WindowPropertySet::Keyboard(KeyboardPropertySet::DisableAutoRepeat)).expect("");
-    
+    // Set keyboard to TextInput
+    window.set_properties(&[WindowPropertySet::SetEventWaitMode(WindowEventWaitMode::AlwaysWait),
+    WindowPropertySet::Keyboard(KeyboardPropertySet::SetMode(KeyboardMode::TextInput))]).unwrap();  
+
+    // Autorepeat keys test
+    main_loop(&mut window, &mut auto_repeat_space::AutoRepeatSpace::new()); 
 
     println!("{}{}{}", BLUE_CONSOLE, "... keyboard event tests ended ...", RESET_CONSOLE);
 
@@ -41,7 +46,7 @@ mod hold_space {
     use std::time::Instant;
 
 
-    use studio::display::desktop::event::{Event, keyboard::{EventKeyboard, KeyIdentity}};
+    use studio::display::desktop::event::{Event, keyboard::{EventKeyboard}};
 
     use crate::{display::desktop::rsrcs::{EventReceiver, SPACE_KEY_VALUE}, tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}};
 
@@ -324,7 +329,7 @@ mod hold_different_keys{
 mod auto_repeat_space {
 
 
-    use studio::display::desktop::event::{Event, keyboard::{EventKeyboard, KeyIdentity}};
+    use studio::display::desktop::event::{Event, keyboard::{EventKeyboard}};
 
     use crate::{display::desktop::rsrcs::{EventReceiver, SPACE_KEY_VALUE}, tools::{YELLOW_CONSOLE, RESET_CONSOLE}};
 
@@ -349,8 +354,8 @@ mod auto_repeat_space {
 
         if let Event::Keyboard(kb_event) = event {
             // Verify if space key was released.
-            if let EventKeyboard::KeyUp(keycode) = kb_event {
-                if *keycode == SPACE_KEY_VALUE {
+            if let EventKeyboard::KeyPress(key) = kb_event {
+                if key.keycode == SPACE_KEY_VALUE {
                     self.press_count+=1;    // Increment press count
                 }
             }

@@ -1,6 +1,4 @@
-use cfg_boost::target_cfg;
-
-use crate::display::desktop::manager::linux::LinuxWindowManager;
+use crate::display::desktop::manager::{WindowManagerType, WindowManager};
 
 /// Enumeration of possible Keyboard events
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -37,60 +35,52 @@ impl Key {
     }
     
     /// Either left or right shift were pressed with key
-    pub fn shift(&self) -> bool{
-        todo!()
-        //KeyModifier::SHIFT & self.modifier > 0
+    pub fn is_shift_down(&self) -> bool{
+        WindowManagerType::is_key_shift_down(self.state)
     }
 
     /// Either left or right ctrl were pressed with key
-    pub fn ctrl(&self) -> bool{
-        todo!()
-        //KeyModifier::CTRL & self.modifier > 0
+    pub fn is_ctrl_down(&self) -> bool{
+        WindowManagerType::is_key_ctrl_down(self.state)
     }
 
     /// Either left or right alt were pressed with key
-    pub fn alt(&self) -> bool{
-        todo!()
-        //KeyModifier::ALT & self.modifier > 0
+    pub fn is_alt_down(&self) -> bool{
+        WindowManagerType::is_key_alt_down(self.state)
     }
 
     /// Either left or right meta were pressed with key
     /// 
     /// Reference(s)
     /// https://askubuntu.com/questions/19558/what-are-the-meta-super-and-hyper-keys
-    pub fn meta(&self) -> bool{
-        todo!()
-        //KeyModifier::META & self.modifier > 0
+    pub fn is_meta_down(&self) -> bool{
+        WindowManagerType::is_key_meta_down(self.state)
     }
 
     /// Either left or right super(command) were pressed with key
     /// 
     /// Reference(s)
     /// https://askubuntu.com/questions/19558/what-are-the-meta-super-and-hyper-keys
-    pub fn command(&self) -> bool{
-        todo!()
-        //KeyModifier::COMMAND & self.modifier > 0
+    pub fn is_command_down(&self) -> bool{
+        WindowManagerType::is_key_command_down(self.state)
     }
 
     /// Either left or right hyper were pressed with key
     /// 
     /// Reference(s)
     /// https://askubuntu.com/questions/19558/what-are-the-meta-super-and-hyper-keys
-    pub fn hyper(&self) -> bool{
-        todo!()
-        //KeyModifier::HYPER & self.modifier > 0
+    pub fn is_hyper_down(&self) -> bool{
+        WindowManagerType::is_key_hyper_down(self.state)
     }
 
     /// Indicate if the caps lock was on (true) or off (false) when key was pressed.
-    pub fn capslock(&self) -> bool{
-        todo!()
-        //KeyModifier::CAPSLOCK & self.modifier > 0
+    pub fn is_capslock_on(&self) -> bool{
+        WindowManagerType::is_capslock_on(self.state)
     }
 
     /// Indicate if the num lock was on (true) or off (false) when key was pressed.
-    pub fn numlock(&self) -> bool{
-        todo!()
-        //KeyModifier::CAPSLOCK & self.modifier > 0
+    pub fn is_numlock_on(&self) -> bool{
+        WindowManagerType::is_numlock_on(self.state)
     }
 
 }

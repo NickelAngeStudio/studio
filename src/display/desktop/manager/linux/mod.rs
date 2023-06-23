@@ -1,6 +1,6 @@
 //! Linux implementations of [WindowManager].
 
-use crate::{display::{ desktop::{ manager::WindowManager, window::{  Window}, event::{Event, keyboard::Key}, property::{WindowProperty, SubWindowOption, WindowPositionOption, KeyboardMode, WindowEventWaitMode}}, DisplayError}, error::StudioError};
+use crate::{display::{ desktop::{ manager::WindowManager, window::{  Window}, event::{Event}, property::{WindowProperty, SubWindowOption, WindowPositionOption, KeyboardMode, WindowEventWaitMode}}, DisplayError}, error::StudioError};
 use self::{wayland::{WaylandWindowManager, WAYLAND_SUPPORTED}, x11::X11WindowManager};
 use super::WindowProvider;
 

@@ -94,7 +94,7 @@ pub fn window_pointer_properties(window: &mut dyn Window) {
         // V3 | Window::is_cursor_visible() is true by default.
         assert_eq!(window.get_pointer_properties().is_visible, true, "Cursor should be visible by default!");
 
-        window_events_loop!()
+        window_events_loop!();
 
         window_x11_step_loop!("Cursor should be visible and not confined...", window);
 
