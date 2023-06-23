@@ -9,7 +9,6 @@ mod events;
 mod log;
 
 
-
 /*********
 * CONSTS *
 *********/

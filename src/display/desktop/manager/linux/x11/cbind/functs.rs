@@ -317,6 +317,18 @@ extern {
     /// Reference(s)
     /// <https://www.x.org/releases/X11R7.5/doc/man/man3/XSetICFocus.3.html>
     pub(crate) fn XSetICFocus(ic : XIC);
+
+    /// The XAutoRepeatOn function turns on auto-repeat for the keyboard on the specified display. 
+    /// 
+    /// Reference(s)
+    /// <https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#XAutoRepeatOn>
+    pub(crate) fn XAutoRepeatOn(x11display : *mut X11Display);
+
+    ///The XAutoRepeatOff function turns off auto-repeat for the keyboard on the specified display. 
+    /// 
+    /// Reference(s)
+    /// <https://www.x.org/releases/current/doc/libX11/libX11/libX11.html#XAutoRepeatOff>
+    pub(crate) fn XAutoRepeatOff(x11display : *mut X11Display);
 }
 
 // XFixes bindings.

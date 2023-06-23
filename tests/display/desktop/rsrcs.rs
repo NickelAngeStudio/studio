@@ -7,7 +7,7 @@ use std::{process::exit, time::{Duration, self}, thread};
 use cfg_boost::target_cfg;
 use studio::display::desktop::Window;
 use studio::display::desktop::event::Event;
-use studio::display::desktop::event::keyboard::{EventKeyboard, KeyIdentity};
+use studio::display::desktop::event::keyboard::{EventKeyboard};
 
 
 use crate::tools::{CYAN_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE, YELLOW_CONSOLE, MAGENTA_CONSOLE};

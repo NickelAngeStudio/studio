@@ -22,7 +22,7 @@ pub const DEFAULT_HEIGHT : u32 = 480;
 
 
 /// [Window] event wait mode.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum WindowEventWaitMode {
     /// This mode is more suitable for games and interfaces that must refresh
     /// often. This mode is MANDATORY if you want to achieve [IMMEDIATE](https://en.wikipedia.org/wiki/Immediate_mode_GUI) user interfaces.
