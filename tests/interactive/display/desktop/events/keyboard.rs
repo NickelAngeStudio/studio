@@ -1,6 +1,8 @@
-use studio::display::desktop::{window::{Window}, property::{WindowPropertySet, KeyboardPropertySet, KeyboardMode, WindowEventWaitMode}};
+use std::{process::exit, time::Instant};
 
-use crate::{display::desktop::{ rsrcs::{main_loop}}, tools::{RESET_CONSOLE, BLUE_CONSOLE}};
+use studio::display::desktop::{window::{Window}, property::{WindowPropertySet, KeyboardPropertySet, KeyboardMode, WindowEventWaitMode}, event::{Event, keyboard::EventKeyboard}};
+
+use crate::{interactive::display::desktop::{ rsrcs::{main_loop, ESC_KEY_VALUE}}, tools::{RESET_CONSOLE, BLUE_CONSOLE, YELLOW_CONSOLE}};
 
 
 /// Test keyboard events
@@ -8,9 +10,7 @@ pub fn test_keyboard(){
 
     let mut window = Window::new().unwrap();
 
-    // Set keyboard to direct input
-    window.set_properties(&[WindowPropertySet::SetEventWaitMode(WindowEventWaitMode::NeverWait),
-    WindowPropertySet::Keyboard(KeyboardPropertySet::SetMode(KeyboardMode::DirectInput))]).unwrap();
+    
 
     window.show();
 
@@ -26,8 +26,8 @@ pub fn test_keyboard(){
     main_loop(&mut window, &mut hold_different_keys::HoldDifferentKeys::new());
 
     // Set keyboard to TextInput
-    window.set_properties(&[WindowPropertySet::SetEventWaitMode(WindowEventWaitMode::AlwaysWait),
-    WindowPropertySet::Keyboard(KeyboardPropertySet::SetMode(KeyboardMode::TextInput))]).unwrap();  
+    window.set_properties(&[WindowPropertySet::EventWaitMode(WindowEventWaitMode::AlwaysWait),
+    WindowPropertySet::Keyboard(KeyboardPropertySet::SetMode(KeyboardMode::TextInput)), WindowPropertySet::Keyboard(KeyboardPropertySet::EnableAutoRepeat)]).unwrap();  
 
     // Autorepeat keys test
     main_loop(&mut window, &mut auto_repeat_space::AutoRepeatSpace::new()); 
@@ -39,6 +39,101 @@ pub fn test_keyboard(){
 
 }
 
+
+macro_rules! test_loop {
+    ($window : expr, $event : ident, $code : block) => {
+        'main: loop {
+            'inner: loop {
+                let $event = $window.poll_event();
+    
+                // ESC exit and NeverWait routine.
+                match $event {
+                    Event::Keyboard(kb_event) => 
+                    match kb_event {
+                        EventKeyboard::KeyDown(keycode) | EventKeyboard::KeyUp(keycode) => if *keycode == ESC_KEY_VALUE {
+                            exit(1);    // Exit and fail test
+                        } ,
+                        EventKeyboard::KeyPress(key) =>  if key.keycode == ESC_KEY_VALUE {
+                            exit(1);    // Exit and fail test
+                        } ,
+                    },
+                    Event::None => break 'inner,     // Break inner loop on Event::None;
+                    _ => {},
+                }
+
+                // Test code
+                $code
+    
+            }
+    
+            std::thread::sleep(std::time::Duration::from_millis(1000/60));
+        }
+    };
+}
+
+
+/// Test holding space bar.
+/// 
+/// # Verification(s)
+/// V1 | Verify that space bar can be pressed
+/// V2 | Verify that we can quantify the duration of press.
+/// V3 | Verify that releasing the key after duration is 
+fn test_hold_space_bar(window: &mut Window) {
+
+    let duration : Instant = Instant::now();    // Duration of press
+    let space_pressed : bool = false;           // True if bar is pressed, false otherwise
+    let step_done:bool = false;                 // Is holding space step done.
+
+    // V1 | Verify that auto repeat is disabled by default
+    assert_eq!(window.get_properties().keyboard.auto_repeat, false, "Auto-repeat should be false by default!");
+
+    // Set keyboard to direct input
+    window.set_properties(&[WindowPropertySet::EventWaitMode(WindowEventWaitMode::NeverWait),
+    WindowPropertySet::Keyboard(KeyboardPropertySet::SetMode(KeyboardMode::DirectInput))]).unwrap();
+
+    // Write instruction
+    println!("{}Hold SPACE on keyboard until told to release...{}", YELLOW_CONSOLE, RESET_CONSOLE);
+
+    test_loop!(window, event, {
+        match event {
+            Event::Keyboard(kb_event) => match kb_event {
+                EventKeyboard::KeyDown(_) => todo!(),
+                EventKeyboard::KeyUp(_) => todo!(),
+                _ => {},
+            },
+            _ => {},
+        }
+    });
+    
+    /*
+    'main: loop {
+        'inner: loop {
+            let event = window.poll_event();
+
+            // ESC exit and NeverWait routine.
+            match event {
+                Event::Keyboard(kb_event) => 
+                match kb_event {
+                    EventKeyboard::KeyDown(keycode) | EventKeyboard::KeyUp(keycode) => if *keycode == ESC_KEY_VALUE {
+                        exit(1);    // Exit and fail test
+                    } ,
+                    EventKeyboard::KeyPress(key) =>  if key.keycode == ESC_KEY_VALUE {
+                        exit(1);    // Exit and fail test
+                    } ,
+                },
+                Event::None => break 'inner,     // Break inner loop on Event::None;
+                _ => {},
+            }
+
+      }
+
+      std::thread::sleep(std::time::Duration::from_millis(1000/60));
+      */
+}
+
+
+
+
 /// This module contains the test which user must hold space bar for 5 seconds.
 /// 
 /// This test is used to see if an anti-repeat routine has been implemented.
@@ -48,7 +143,7 @@ mod hold_space {
 
     use studio::display::desktop::event::{Event, keyboard::{EventKeyboard}};
 
-    use crate::{display::desktop::rsrcs::{EventReceiver, SPACE_KEY_VALUE}, tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}};
+    use crate::{interactive::display::desktop::rsrcs::{EventReceiver, SPACE_KEY_VALUE}, tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}};
 
     const HOLD_TIME_SEC:u64 = 5;  // Count of seconds to hold bar
 
@@ -148,7 +243,7 @@ mod different_keys{
 
     use studio::display::desktop::event::{Event, keyboard::EventKeyboard};
 
-    use crate::{tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}, display::desktop::rsrcs::EventReceiver};
+    use crate::{tools::{YELLOW_CONSOLE, RESET_CONSOLE, BLUE_CONSOLE}, interactive::display::desktop::rsrcs::EventReceiver};
 
     // Count of keys to press.
     const KEY_COUNT:usize = 50;
@@ -215,7 +310,7 @@ mod hold_different_keys{
 
     use studio::display::desktop::event::{Event, keyboard::EventKeyboard};
 
-    use crate::{tools::{YELLOW_CONSOLE, RESET_CONSOLE, MAGENTA_CONSOLE}, display::desktop::rsrcs::EventReceiver};
+    use crate::{tools::{YELLOW_CONSOLE, RESET_CONSOLE, MAGENTA_CONSOLE}, interactive::display::desktop::rsrcs::EventReceiver};
 
     // Count of keys to hold.
     const KEY_COUNT:usize = 3;
@@ -331,7 +426,7 @@ mod auto_repeat_space {
 
     use studio::display::desktop::event::{Event, keyboard::{EventKeyboard}};
 
-    use crate::{display::desktop::rsrcs::{EventReceiver, SPACE_KEY_VALUE}, tools::{YELLOW_CONSOLE, RESET_CONSOLE}};
+    use crate::{interactive::display::desktop::rsrcs::{EventReceiver, SPACE_KEY_VALUE}, tools::{YELLOW_CONSOLE, RESET_CONSOLE}};
 
     const SPACE_BAR_COUNT:usize = 300;  // Count of spacebar press needed to finish (about 5 secs)
 

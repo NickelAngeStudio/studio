@@ -1,5 +1,8 @@
 /// Macros for tests
 pub mod tools;
 
-/// Display integration tests
-pub mod display;
+/// Non-interactive integration tests
+pub mod noninteractive;
+
+/// Interactive integration tests
+pub mod interactive;

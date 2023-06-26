@@ -76,7 +76,7 @@ impl ScreenList {
 /// 
 /// # Note(s)
 /// Refresh rate is stored as unsigned integer. A 60hz refresh rate is 6000 and a 144hz is 14400. 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Screen {
     /// Identifier of that screen
     identifier : String,
@@ -141,7 +141,7 @@ impl Screen {
 /// 
 /// # Note(s)
 /// Refresh rate is stored as unsigned integer. A 60hz refresh rate is 6000 and a 144hz is 14400. 
-#[derive(Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ScreenResolution {
     width : u32,
     height : u32,

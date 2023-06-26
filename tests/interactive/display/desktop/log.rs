@@ -2,7 +2,7 @@
 
 use studio::display::desktop::{event::{Event}, Window, property::{WindowPropertySet, WindowEventWaitMode, KeyboardPropertySet, KeyboardMode}};
 
-use crate::{tools::{BLUE_CONSOLE, RESET_CONSOLE}, display::desktop::rsrcs::main_loop};
+use crate::{tools::{BLUE_CONSOLE, RESET_CONSOLE}, interactive::display::desktop::rsrcs::main_loop};
 
 use super::rsrcs::EventReceiver;
 
@@ -10,7 +10,7 @@ use super::rsrcs::EventReceiver;
 pub fn log_window(){
 
     let mut window = Window::new().unwrap();
-    window.set_properties(&[WindowPropertySet::SetEventWaitMode(WindowEventWaitMode::AlwaysWait),
+    window.set_properties(&[WindowPropertySet::EventWaitMode(WindowEventWaitMode::AlwaysWait),
     WindowPropertySet::Keyboard(KeyboardPropertySet::SetMode(KeyboardMode::TextInput))]).unwrap();
 
     window.show();

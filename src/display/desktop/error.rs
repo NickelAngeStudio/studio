@@ -19,13 +19,22 @@ pub enum DisplayError {
     /// Happens when trying to make a window it's own parent.
     ParentSameAsSub,
 
-    /// Happens when trying to make a target child window it's parent.
-    ParentIsParent,
+    /// Happens when trying to add a subwindow to a parent locked by a modal window.
+    ParentIsLockedByModal,
 
-    /// Happens when trying to show a window with a position relative to a parent but no parent is specified.
-    PositionNoParent,
+    /// Happens when trying to open a modal window without parent
+    ModalRequiresParent,
 
-    /// Happens when trying to change a window parent that is locked.
-    ParentIsLocked,
+    /// Happens when trying to make a parent window a sub window.
+    SubHasChild,
+
+    /// Happens when trying to show a window that is already showed
+    WindowAlreadyOpened,
+
+    /// Happens when trying to close a window that was not opened.
+    WindowNotOpened,
+
+    /// Happens when trying to show a subwindow on a parent that is not opened.
+    ParentNotOpened
 
 }

@@ -4,7 +4,7 @@ use cfg_boost::target_cfg;
 
 use crate::error::StudioError;
 
-use super::{property::{WindowProperty, SubWindowOption, WindowPositionOption, FullScreenMode, PointerMode, KeyboardMode, WindowEventWaitMode}, event::{Event}, Window};
+use super::{property::{WindowProperty, WindowPositionOption, FullScreenMode, PointerMode, KeyboardMode}, event::{Event}, window::WindowShowOption, Window};
 
 /// Enumeration of [Display server](https://en.wikipedia.org/wiki/Windowing_system#Display_server)
 /// and/or [Window manager](https://en.wikipedia.org/wiki/Window_manager) providers.
@@ -31,7 +31,7 @@ target_cfg! {
     linux => {
         // Linux implementation of WindowManager trait
         pub mod linux;
-        pub type WindowManagerType<'window> = super::manager::linux::LinuxWindowManager<'window>;
+        pub type WindowManagerType = super::manager::linux::LinuxWindowManager;
     },
 
 }
@@ -39,7 +39,7 @@ target_cfg! {
 /// Manager that manage the [Window].
 /// 
 /// Each property set returns either true or false depending if window need to be recreate.
-pub trait WindowManager<'window> {
+pub trait WindowManager {
     /// Create a new WindowManager instance.
     fn new() -> Result<Self, StudioError> where Self : Sized;
 
@@ -49,91 +49,84 @@ pub trait WindowManager<'window> {
     /// Get immutable reference to the window properties
     fn get_properties(&self) -> &WindowProperty;
 
-    /// Pop an event from the manager.
-    fn poll_event(&mut self) -> &Event;
+    target_cfg! {
+        !immediate:ft => {  // Retained mode
+            /// Pop an event from the manager.
+            fn poll_event(&mut self) -> Event;
 
-    /// Recreate window.
-    fn recreate(&mut self);
+            /// Show the window according to show option.
+            fn show(&mut self, option : WindowShowOption, parent : Option<&Window>);
+        },
+        immediate:ft => {   // Immediate mode
+            /// Pop an event from the manager and return a reference.
+            fn poll_event(&mut self) -> &Event;
 
-    /// Show the window according to show option.
-    fn show(&mut self);
+            /// Show the window according to show option.
+            fn show(&mut self);
+        }
+    }
+
+    
 
     /// Force close the window.
     fn close(&mut self);
 
-    /// Hide the window.
-    fn hide(&mut self);
-
     /// Restore the window.
     fn restore(&mut self);
-
-    /// Get the OS Window manager window handle.
-    fn get_window_handle(&self) -> Option<*const usize>;
 
     /// Push an event that will be poll during poll_event.
     fn push_event(&self, event: Event);
 
-    target_cfg! {
-        linux => {
-            /// Get the OS Window manager display handle.
-            fn get_display_handle(&self) -> *const usize;
-        }
-    }
-
-    /// Set window parent.
-    fn set_parent<'manager: 'window>(&mut self, parent : &'manager Window<'manager>, option : SubWindowOption) -> bool;
-
-    /// Remove the window parent.
-    fn remove_parent(&mut self) -> bool;
+    /// Refresh properties set. Called after Window::set_properties and Window::set_property.
+    fn refresh(&mut self);
 
     /// Set the window title.
-    fn set_title(&mut self, title : &String) -> bool;
+    fn set_title(&mut self, title : &String);
 
     /// Set window absolute position.
-    fn set_position(&mut self, option : WindowPositionOption) -> bool;
+    fn set_position(&mut self, option : WindowPositionOption);
 
     /// Set window size.
-    fn set_size(&mut self, size : &(u32,u32)) -> bool;
+    fn set_size(&mut self, size : &(u32,u32));
 
     /// Show window decoration such as title bar, buttons, etc...
-    fn show_decoration(&mut self) -> bool;
+    fn show_decoration(&mut self);
 
     /// Hide window decoration such as title bar, buttons, etc...
-    fn hide_decoration(&mut self) -> bool;
+    fn hide_decoration(&mut self);
 
     /// Minimize window into taskbar.
-    fn minimize(&mut self) -> bool;
+    fn minimize(&mut self);
 
     /// Maximize window.
-    fn maximize(&mut self) -> bool;
+    fn maximize(&mut self);
 
-    /// Set the [WindowEventWaitMode].
-    fn set_event_wait_mode(&mut self, mode : WindowEventWaitMode) -> bool;
-
-    /// Setting window fullscreen trigger 
-    /// window recreate.
-    fn set_fullscreen(&mut self, fsmode : FullScreenMode) -> bool;
+    /// Set the window fullscreen according to mode.
+    fn set_fullscreen(&mut self, fsmode : FullScreenMode);
 
     /// Set keyboard mode.
-    fn set_keyboard_mode(&mut self, mode : KeyboardMode) -> bool;
+    fn set_keyboard_mode(&mut self, mode : KeyboardMode);
+
+    /// Set keyboard auto repeat.
+    fn set_keyboard_auto_repeat(&mut self, auto_repeat : bool);
 
     /// Set the pointer mode.
-    fn set_pointer_mode(&mut self, mode : &PointerMode) -> bool;
+    fn set_pointer_mode(&mut self, mode : &PointerMode);
 
     /// Set the pointer position relative to the window.
-    fn set_pointer_position(&mut self, position : (i32, i32)) -> bool;
+    fn set_pointer_position(&mut self, position : (i32, i32));
 
     /// Show the pointer, making it visible.
-    fn show_pointer(&mut self) -> bool;
+    fn show_pointer(&mut self);
 
     /// Hide the pointer, making it invisible.
-    fn hide_pointer(&mut self) -> bool;
+    fn hide_pointer(&mut self);
 
     /// Confine the pointer to window boundaries, preventing escape.
-    fn confine_pointer(&mut self) -> bool;
+    fn confine_pointer(&mut self);
 
     /// Release the pointer from window boundaries, allowing escape.
-    fn release_pointer(&mut self) -> bool;
+    fn release_pointer(&mut self);
 
     /*********
     * STATIC *

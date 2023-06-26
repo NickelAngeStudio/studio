@@ -1,5 +1,5 @@
 
-use crate::{tools::{BLUE_CONSOLE, RESET_CONSOLE, MAGENTA_CONSOLE}, display::desktop::rsrcs::get_user_selection};
+use crate::{tools::{BLUE_CONSOLE, RESET_CONSOLE, MAGENTA_CONSOLE}, interactive::display::desktop::rsrcs::get_user_selection};
 use self::{keyboard::test_keyboard, pointer::test_pointer};
 
 /**

@@ -1,4 +1,6 @@
-use crate::{display::desktop::{manager::WindowManager, manager::WindowProvider, Window, property::{KeyboardMode, WindowEventWaitMode}}, error::StudioError};
+use cfg_boost::target_cfg;
+
+use crate::{display::desktop::{manager::WindowManager, manager::{WindowProvider}, Window, property::{KeyboardMode}, window::WindowShowOption}, error::StudioError};
 
 /// Static cache to know if wayland is supported
 #[doc(hidden)]
@@ -23,7 +25,7 @@ impl WaylandWindowManager {
     }
 }
 
-impl<'window> WindowManager<'window> for WaylandWindowManager {
+impl WindowManager for WaylandWindowManager {
     fn new() -> Result<Self, StudioError> where Self : Sized {
         todo!()
     }
@@ -37,23 +39,32 @@ impl<'window> WindowManager<'window> for WaylandWindowManager {
         todo!()
     }
 
-    fn poll_event(&mut self) -> &crate::display::desktop::event::Event {
-        todo!()
+    target_cfg! {
+        !immediate:ft => {  // Retained mode
+            fn show(&mut self, _option : WindowShowOption, _parent : Option<&Window>) {
+                todo!()
+            }
+
+            #[inline(always)]
+            fn poll_event(&mut self) -> crate::display::desktop::event::Event  {
+                todo!()
+            }
+        },
+        immediate:ft => {   // Immediate mode
+            fn show(&mut self) {
+                todo!()
+            }
+
+            #[inline(always)]
+            fn poll_event(&mut self) -> &crate::display::desktop::event::Event  {
+                todo!()
+            }
+        }
     }
 
-    fn recreate(&mut self) {
-        todo!()
-    }
-
-    fn show(&mut self) {
-        todo!()
-    }
+    
 
     fn close(&mut self) {
-        todo!()
-    }
-
-    fn hide(&mut self) {
         todo!()
     }
 
@@ -61,93 +72,74 @@ impl<'window> WindowManager<'window> for WaylandWindowManager {
         todo!()
     }
 
-    fn get_window_handle(&self) -> Option<*const usize> {
-        todo!()
-    }
 
     fn push_event(&self, _event: crate::display::desktop::event::Event) {
         todo!()
     }
-
-    #[cfg(any(doc,target_os = "linux"))]
-#[cfg_attr(docsrs,doc(cfg(target_os = "linux")))]
-#[doc = " Get the OS Window manager display handle."]
-fn get_display_handle(&self) ->  *const usize {
-        todo!()
-    }
-
    
 
-    fn remove_parent(&mut self) -> bool {
+    fn set_title(&mut self, _title : &String){
         todo!()
     }
 
-    fn set_title(&mut self, _title : &String) -> bool {
+    fn set_position(&mut self, _option : crate::display::desktop::property::WindowPositionOption){
         todo!()
     }
 
-    fn set_position(&mut self, _option : crate::display::desktop::property::WindowPositionOption) -> bool {
+    fn set_size(&mut self, _size : &(u32,u32)){
         todo!()
     }
 
-    fn set_size(&mut self, _size : &(u32,u32)) -> bool {
+    fn show_decoration(&mut self){
         todo!()
     }
 
-    fn show_decoration(&mut self) -> bool {
+    fn hide_decoration(&mut self){
         todo!()
     }
 
-    fn hide_decoration(&mut self) -> bool {
+    fn minimize(&mut self){
         todo!()
     }
 
-    fn minimize(&mut self) -> bool {
+    fn maximize(&mut self){
         todo!()
     }
 
-    fn maximize(&mut self) -> bool {
+    fn set_fullscreen(&mut self, _fsmode : crate::display::desktop::property::FullScreenMode){
+        todo!()
+    }
+
+    fn set_keyboard_mode(&mut self, _mode : KeyboardMode){
         todo!()
     }
 
     #[inline(always)]
-    fn set_event_wait_mode(&mut self, _mode : WindowEventWaitMode) -> bool {
+    fn set_keyboard_auto_repeat(&mut self, auto_repeat : bool){
         todo!()
     }
 
-    fn set_fullscreen(&mut self, _fsmode : crate::display::desktop::property::FullScreenMode) -> bool {
+    fn set_pointer_mode(&mut self, _mode : &crate::display::desktop::property::PointerMode){
         todo!()
     }
 
-    fn set_keyboard_mode(&mut self, _mode : KeyboardMode) -> bool {
+    fn set_pointer_position(&mut self, _position : (i32, i32)){
         todo!()
     }
 
-    fn set_pointer_mode(&mut self, _mode : &crate::display::desktop::property::PointerMode) -> bool {
+    fn show_pointer(&mut self){
         todo!()
     }
 
-    fn set_pointer_position(&mut self, _position : (i32, i32)) -> bool {
+    fn hide_pointer(&mut self){
         todo!()
     }
 
-    fn show_pointer(&mut self) -> bool {
+    fn confine_pointer(&mut self){
         todo!()
     }
 
-    fn hide_pointer(&mut self) -> bool {
-        todo!()
-    }
-
-    fn confine_pointer(&mut self) -> bool {
-        todo!()
-    }
-
-    fn release_pointer(&mut self) -> bool {
-        todo!()
-    }
-
-    fn set_parent<'manager: 'window>(&mut self, _parent : &'manager Window<'manager>, _option : crate::display::desktop::property::SubWindowOption) -> bool {
+    fn release_pointer(&mut self){
         todo!()
     }
 
@@ -180,6 +172,10 @@ fn get_display_handle(&self) ->  *const usize {
     }
 
     fn is_numlock_on(_state : u32) -> bool {
+        todo!()
+    }
+
+    fn refresh(&mut self) {
         todo!()
     }
 

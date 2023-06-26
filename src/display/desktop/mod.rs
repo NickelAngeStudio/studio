@@ -22,3 +22,8 @@ pub use window::Window as Window;
 
 // Properties
 pub mod property;
+
+// Contains Desktop tests
+#[cfg(test)]
+#[doc(hidden)]
+pub mod tests;

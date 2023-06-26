@@ -9,6 +9,12 @@ edition = "2021"
 cfg_boost = "1.0.0"
 tests_bin = "1.0.0"
 
+[features]
+# Default features
+default = ["immediate"]
+
+# This enable the window immediate mode used for graphical intensive application like games, 3d modeling, etc...
+immediate = []
 
 [package.metadata.docs.rs]
 all-features = true

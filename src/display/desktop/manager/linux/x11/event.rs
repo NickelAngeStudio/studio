@@ -2,7 +2,9 @@
 
 use std::{ffi::{c_int, c_ulong, c_char, c_void}, ptr::null_mut};
 
-use crate::display::desktop::{event::{Event, keyboard::{EventKeyboard, Key}, pointer::{EventPointer, PointerButton}, window::EventWindow}, manager::WindowManager, property::{PointerMode, WindowEventWaitMode, KeyboardMode}};
+use cfg_boost::match_cfg;
+
+use crate::display::desktop::{event::{Event, keyboard::{EventKeyboard, Key}, pointer::{EventPointer, PointerButton}, window::EventWindow}, manager::WindowManager, property::{PointerMode, KeyboardMode}};
 
 use super::{ cbind::{structs::{XEvent, Atom}, constants::VisibilityUnobscured, functs::{XGetWindowProperty, XFree, XNextEvent, XEventsQueued, XSync, Xutf8LookupString, XFilterEvent}, xinput::{XBufferOverflow, XLookupChars}}, X11WindowManager};
 use super::cbind::{constants::* };
@@ -38,7 +40,7 @@ const POINTER_SCROLL_LEFT: u32 = 6;
 /// Pointer scroll right index for X11
 const POINTER_SCROLL_RIGHT: u32 = 7;
 
-impl<'window> X11WindowManager<'window> {
+impl X11WindowManager {
 
     /// Get the event queue count
     #[inline(always)]
@@ -65,8 +67,13 @@ impl<'window> X11WindowManager<'window> {
             if self.retained_events.borrow().len() > 0 { // Always pop event from retained first.
                self.retained_events.borrow_mut().pop().unwrap()
             } else {
-                match self.property.wait_mode{
-                    WindowEventWaitMode::NeverWait => {
+                match_cfg! {
+                    !immediate:ft => {  // Retained mode
+                        XNextEvent(self.display, &mut self.x_event);    // Will lock window waiting for events
+                        let xevent = self.x_event; 
+                        self.get_matched_event(&xevent)
+                    },
+                    _ => {  // Immediate mode
                         if self.event_count > 0 {    // If event count > 0, preventing window lock
                             self.event_count -= 1;  // Decrease event count
                             XNextEvent(self.display, &mut self.x_event);
@@ -75,12 +82,7 @@ impl<'window> X11WindowManager<'window> {
                         } else {
                            Event::None
                         }
-                    },
-                    WindowEventWaitMode::AlwaysWait => {
-                        XNextEvent(self.display, &mut self.x_event);    // Will lock window waiting for events
-                        let xevent = self.x_event; 
-                        self.get_matched_event(&xevent)
-                    },
+                    }
                 }
             }                
         }
@@ -277,6 +279,9 @@ impl<'window> X11WindowManager<'window> {
             self.property.pointer.visible = true;
             self.hide_pointer();
         }
+
+        // Set auto repeat according to property.
+        self.set_xauto_repeat();
 
         Event::Window(EventWindow::CursorEnter)
     }
@@ -527,7 +532,7 @@ impl<'window> X11WindowManager<'window> {
             let mut bytes_after_return : c_ulong = 0; 
             let mut prop_return : *mut c_char = null_mut();
 
-            XGetWindowProperty(self.display, self.window, self.atoms._NET_WM_STATE, 
+            XGetWindowProperty(self.display, self.window.unwrap(), self.atoms._NET_WM_STATE, 
                 0, 1024, false, self.atoms.xa_atom, &mut actual_type_return, &mut actual_format_return, 
                 &mut nitems_return, &mut bytes_after_return, &mut prop_return);
             
